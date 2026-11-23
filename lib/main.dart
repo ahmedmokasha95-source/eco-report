@@ -2,9 +2,11 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:geolocator/geolocator.dart';
+import 'package:http/http.dart' as http;
 import 'package:image_picker/image_picker.dart';
 import 'package:latlong2/latlong.dart' show LatLng;
 import 'package:path_provider/path_provider.dart';
@@ -17,6 +19,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  await AppSettings.instance.load();
   await OptionStore.load();
   runApp(const EcoReportApp());
 }
@@ -194,6 +197,11 @@ class Report {
   DateTime? closedAt;
   double? lat;
   double? lng;
+  DateTime updatedAt;
+  String? imageUrl;
+  String? closedImageUrl;
+  bool remote;
+  bool dirty;
 
   Report({
     required this.id,
@@ -214,9 +222,36 @@ class Report {
     this.closedAt,
     this.lat,
     this.lng,
-  }) : impacts = impacts ?? <String>[];
+    DateTime? updatedAt,
+    this.imageUrl,
+    this.closedImageUrl,
+    this.remote = false,
+    this.dirty = false,
+  })  : impacts = impacts ?? <String>[],
+        updatedAt = updatedAt ?? createdAt;
 
   bool get hasLocation => lat != null && lng != null;
+
+  Map<String, dynamic> toServer() => {
+        'id': id,
+        'created_at': createdAt.toUtc().toIso8601String(),
+        'location': location,
+        'type': type,
+        'responsibility': responsibility,
+        'severity': severity,
+        'description': description,
+        'impacts': impacts,
+        'reporter': reporter,
+        'status': status,
+        'corrective_action': correctiveAction,
+        'due_date': dueDate?.toUtc().toIso8601String(),
+        'closed_at': closedAt?.toUtc().toIso8601String(),
+        'lat': lat,
+        'lng': lng,
+        'image_url': imageUrl,
+        'closed_image_url': closedImageUrl,
+        'updated_at': updatedAt.toUtc().toIso8601String(),
+      };
 
   Map<String, dynamic> toJson() => {
         'id': id,
@@ -237,6 +272,11 @@ class Report {
         'closedAt': closedAt?.toIso8601String(),
         'lat': lat,
         'lng': lng,
+        'updatedAt': updatedAt.toIso8601String(),
+        'imageUrl': imageUrl,
+        'closedImageUrl': closedImageUrl,
+        'remote': remote,
+        'dirty': dirty,
       };
 
   factory Report.fromJson(Map<String, dynamic> j) => Report(
@@ -264,6 +304,13 @@ class Report {
             : DateTime.parse(j['closedAt'] as String),
         lat: (j['lat'] as num?)?.toDouble(),
         lng: (j['lng'] as num?)?.toDouble(),
+        updatedAt: j['updatedAt'] == null
+            ? null
+            : DateTime.parse(j['updatedAt'] as String),
+        imageUrl: j['imageUrl'] as String?,
+        closedImageUrl: j['closedImageUrl'] as String?,
+        remote: (j['remote'] ?? false) as bool,
+        dirty: (j['dirty'] ?? false) as bool,
       );
 
   Report copy() => Report.fromJson(toJson());
@@ -294,8 +341,10 @@ class ReportStore {
     for (final r in list) {
       if (r.no > counter) counter = r.no;
     }
-    final legacy = list.where((r) => r.no == 0).toList()
-      ..sort((a, b) => a.id.compareTo(b.id));
+    final legacy = AppSettings.instance.syncActive
+        ? <Report>[]
+        : (list.where((r) => r.no == 0).toList()
+          ..sort((a, b) => a.id.compareTo(b.id)));
     if (legacy.isNotEmpty) {
       for (final r in legacy) {
         counter++;
@@ -318,6 +367,8 @@ class ReportStore {
         _key, jsonEncode(reports.map((r) => r.toJson()).toList()));
   }
 
+  static Future<void> saveAll(List<Report> reports) => _save(reports);
+
   static Future<String> copyImage(XFile f) async {
     final dir = await getApplicationDocumentsDirectory();
     final dest = '${dir.path}/img_${DateTime.now().microsecondsSinceEpoch}.jpg';
@@ -329,12 +380,17 @@ class ReportStore {
     final prefs = await SharedPreferences.getInstance();
     final list = await load();
     var counter = prefs.getInt(_counterKey) ?? 0;
-    for (final x in list) {
-      if (x.no > counter) counter = x.no;
+    if (AppSettings.instance.syncActive) {
+      // الرقم بيتحدد من السيرفر بعد المزامنة.
+      r.no = 0;
+    } else {
+      for (final x in list) {
+        if (x.no > counter) counter = x.no;
+      }
+      counter++;
+      r.no = counter;
+      await prefs.setInt(_counterKey, counter);
     }
-    counter++;
-    r.no = counter;
-    await prefs.setInt(_counterKey, counter);
     list.add(r);
     await _save(list);
     return r;
@@ -363,6 +419,9 @@ class ReportStore {
 
 // ═════════════════════════ أدوات مساعدة ═════════════════════════
 
+String noLabel(Report r) => r.no == 0 ? 'جديد' : '#${r.no}';
+String noText(Report r) => r.no == 0 ? 'جديد' : 'رقم ${r.no}';
+
 String _two(int n) => n.toString().padLeft(2, '0');
 String fmtDate(DateTime d) => '${d.year}/${_two(d.month)}/${_two(d.day)}';
 String fmtIso(DateTime d) => '${d.year}-${_two(d.month)}-${_two(d.day)}';
@@ -382,7 +441,6 @@ InputDecoration deco(String label, {String? hint, IconData? icon}) {
     prefixIcon: icon == null ? null : Icon(icon),
     border: const OutlineInputBorder(),
     filled: true,
-    fillColor: Colors.white,
   );
 }
 
@@ -463,7 +521,7 @@ class _TextPromptState extends State<_TextPrompt> {
 
 String reportText(Report r) {
   final lines = <String>[
-    'بلاغ بيئي رقم ${r.no}',
+    'بلاغ بيئي ${noText(r)}',
     'التاريخ: ${fmtDate(r.createdAt)}',
     'المكان: ${OptionStore.ar('location', r.location)}',
     'النوع: ${OptionStore.ar('type', r.type)}',
@@ -522,7 +580,7 @@ Future<File> buildCsv(List<Report> list) async {
   final rows = <String>[headers.map(_csvCell).join(',')];
   for (final r in sorted) {
     final cells = <String>[
-      '${r.no}',
+      r.no == 0 ? '' : '${r.no}',
       fmtIso(r.createdAt),
       r.location,
       r.description,
@@ -637,7 +695,7 @@ Future<File> buildPdf(List<Report> list, String title) async {
   for (final r in sorted) {
     widgets.add(pw.Divider(color: PdfColors.grey500));
     widgets.add(t(
-      'بلاغ رقم ${r.no} - ${OptionStore.ar('type', r.type)}',
+      'بلاغ ${noText(r)} - ${OptionStore.ar('type', r.type)}',
       strong: true,
       size: 14,
     ));
@@ -809,7 +867,6 @@ class FieldBox extends StatelessWidget {
           suffixIcon: trailing ?? const Icon(Icons.arrow_drop_down),
           border: const OutlineInputBorder(),
           filled: true,
-          fillColor: Colors.white,
         ),
         isEmpty: text == null || text!.isEmpty,
         child: Text(
@@ -947,6 +1004,477 @@ class _PickerSheet extends StatelessWidget {
   }
 }
 
+// ═════════════════════════ الإعدادات ═════════════════════════
+
+int _ci(int v, int lo, int hi) => v < lo ? lo : (v > hi ? hi : v);
+
+class AppSettings extends ChangeNotifier {
+  AppSettings._();
+  static final AppSettings instance = AppSettings._();
+
+  static const List<Color> seeds = [
+    Color(0xFF2E7D32),
+    Color(0xFF1565C0),
+    Color(0xFF00796B),
+    Color(0xFFE65100),
+    Color(0xFF6A1B9A),
+    Color(0xFFC62828),
+    Color(0xFF5D4037),
+    Color(0xFF37474F),
+  ];
+  static const List<String> seedNames = [
+    'أخضر',
+    'أزرق',
+    'تركواز',
+    'برتقالي',
+    'بنفسجي',
+    'أحمر',
+    'بني',
+    'رمادي',
+  ];
+  static const List<double> textScales = [0.9, 1.0, 1.15, 1.3];
+
+  ThemeMode themeMode = ThemeMode.system;
+  int seedIndex = 0;
+  int cardStyle = 0; // 0 = مضغوطة، 1 = بطاقات كبيرة
+  int textSize = 1;
+  bool syncEnabled = false;
+  String serverUrl = '';
+  String serverKey = '';
+  String reporterName = '';
+  DateTime? lastSync;
+
+  Color get seed => seeds[seedIndex];
+  double get textScale => textScales[textSize];
+
+  bool get syncActive =>
+      syncEnabled &&
+      serverUrl.trim().isNotEmpty &&
+      serverKey.trim().isNotEmpty;
+
+  String get baseUrl {
+    var u = serverUrl.trim();
+    while (u.endsWith('/')) {
+      u = u.substring(0, u.length - 1);
+    }
+    if (u.isNotEmpty && !u.startsWith('http')) u = 'https://$u';
+    return u;
+  }
+
+  Future<void> load() async {
+    try {
+      final p = await SharedPreferences.getInstance();
+      themeMode = ThemeMode.values[_ci(p.getInt('set_theme') ?? 0, 0, 2)];
+      seedIndex = _ci(p.getInt('set_seed') ?? 0, 0, seeds.length - 1);
+      cardStyle = _ci(p.getInt('set_cards') ?? 0, 0, 1);
+      textSize = _ci(p.getInt('set_text') ?? 1, 0, textScales.length - 1);
+      syncEnabled = p.getBool('set_sync') ?? false;
+      serverUrl = p.getString('set_url') ?? '';
+      serverKey = p.getString('set_key') ?? '';
+      reporterName = p.getString('reporter_name') ?? '';
+      final ls = p.getString('set_last_sync');
+      lastSync = ls == null ? null : DateTime.tryParse(ls);
+    } catch (_) {}
+  }
+
+  Future<void> _persist() async {
+    try {
+      final p = await SharedPreferences.getInstance();
+      await p.setInt('set_theme', themeMode.index);
+      await p.setInt('set_seed', seedIndex);
+      await p.setInt('set_cards', cardStyle);
+      await p.setInt('set_text', textSize);
+      await p.setBool('set_sync', syncEnabled);
+      await p.setString('set_url', serverUrl);
+      await p.setString('set_key', serverKey);
+      await p.setString('reporter_name', reporterName);
+      if (lastSync != null) {
+        await p.setString('set_last_sync', lastSync!.toIso8601String());
+      }
+    } catch (_) {}
+  }
+
+  void _changed({bool notify = true}) {
+    _persist();
+    if (notify) notifyListeners();
+  }
+
+  void setThemeMode(ThemeMode m) {
+    themeMode = m;
+    _changed();
+  }
+
+  void setSeed(int i) {
+    seedIndex = i;
+    _changed();
+  }
+
+  void setCardStyle(int i) {
+    cardStyle = i;
+    _changed();
+  }
+
+  void setTextSize(int i) {
+    textSize = i;
+    _changed();
+  }
+
+  void setSyncEnabled(bool v) {
+    syncEnabled = v;
+    _changed();
+  }
+
+  void setServerUrl(String v) {
+    final before = syncActive;
+    serverUrl = v;
+    _changed(notify: before != syncActive);
+  }
+
+  void setServerKey(String v) {
+    final before = syncActive;
+    serverKey = v;
+    _changed(notify: before != syncActive);
+  }
+
+  void setReporterName(String v) {
+    reporterName = v;
+    _changed(notify: false);
+  }
+
+  void setLastSync(DateTime d) {
+    lastSync = d;
+    _changed(notify: false);
+  }
+}
+
+// ═════════════════════════ المزامنة مع السيرفر (Supabase) ═════════════════════════
+
+/// سكربت يتشغّل مرة واحدة في Supabase (SQL Editor) لإنشاء الجدول ومخزن الصور.
+const String kSetupSql = r'''
+-- Eco Report: one-time setup for Supabase
+create table if not exists public.reports (
+  id text primary key,
+  report_no bigint generated always as identity,
+  created_at timestamptz not null default now(),
+  location text not null default '',
+  type text not null default '',
+  responsibility text not null default '',
+  severity text not null default 'Medium',
+  description text not null default '',
+  impacts text[] not null default '{}',
+  reporter text not null default '',
+  status text not null default 'Open',
+  corrective_action text not null default '',
+  due_date timestamptz,
+  closed_at timestamptz,
+  lat double precision,
+  lng double precision,
+  image_url text,
+  closed_image_url text,
+  updated_at timestamptz not null default now()
+);
+
+alter table public.reports enable row level security;
+
+drop policy if exists "reports_read" on public.reports;
+create policy "reports_read" on public.reports
+  for select to anon using (true);
+
+drop policy if exists "reports_insert" on public.reports;
+create policy "reports_insert" on public.reports
+  for insert to anon with check (true);
+
+drop policy if exists "reports_update" on public.reports;
+create policy "reports_update" on public.reports
+  for update to anon using (true) with check (true);
+
+grant usage on schema public to anon;
+grant select, insert, update on public.reports to anon;
+
+insert into storage.buckets (id, name, public)
+values ('report-photos', 'report-photos', true)
+on conflict (id) do nothing;
+
+drop policy if exists "photos_read" on storage.objects;
+create policy "photos_read" on storage.objects
+  for select to anon using (bucket_id = 'report-photos');
+
+drop policy if exists "photos_insert" on storage.objects;
+create policy "photos_insert" on storage.objects
+  for insert to anon with check (bucket_id = 'report-photos');
+''';
+
+class SyncException implements Exception {
+  final String message;
+  SyncException(this.message);
+}
+
+class SyncResult {
+  final int pushed;
+  final int pulled;
+  const SyncResult(this.pushed, this.pulled);
+}
+
+class SyncService {
+  static bool running = false;
+  static const Duration _timeout = Duration(seconds: 40);
+
+  static String get _base => AppSettings.instance.baseUrl;
+
+  static Map<String, String> _headers([Map<String, String>? extra]) {
+    final key = AppSettings.instance.serverKey.trim();
+    return {
+      'apikey': key,
+      if (key.startsWith('eyJ')) 'Authorization': 'Bearer $key',
+      ...?extra,
+    };
+  }
+
+  static String _explain(int code, String what) {
+    if (code == 401 || code == 403) {
+      return 'مفيش صلاحية في $what. راجع المفتاح وسكربت الإعداد';
+    }
+    if (code == 404) {
+      return 'مش لاقي الجدول أو مخزن الصور. شغّل سكربت الإعداد في Supabase';
+    }
+    return 'فشل $what (كود $code)';
+  }
+
+  /// بيرجّع 'ok' لو الاتصال سليم، وغير كده رسالة الخطأ.
+  static Future<String> testConnection() async {
+    try {
+      final res = await http
+          .get(Uri.parse('$_base/rest/v1/reports?select=id&limit=1'),
+              headers: _headers())
+          .timeout(_timeout);
+      if (res.statusCode == 200) return 'ok';
+      if (res.statusCode == 404) {
+        return 'الاتصال تمام لكن جدول reports مش موجود. شغّل سكربت الإعداد في Supabase';
+      }
+      if (res.statusCode == 401 || res.statusCode == 403) {
+        return 'المفتاح غلط أو مفيش صلاحية (${res.statusCode})';
+      }
+      return 'فشل الاتصال (كود ${res.statusCode})';
+    } catch (_) {
+      return 'مقدرناش نوصل للسيرفر. راجع الرابط والإنترنت';
+    }
+  }
+
+  static Future<SyncResult> sync() async {
+    if (running) throw SyncException('المزامنة شغالة بالفعل');
+    running = true;
+    try {
+      var pushed = 0;
+      var pulled = 0;
+      final list = await ReportStore.load();
+
+      // 1) إرسال الجديد والمعدّل
+      for (final r in list) {
+        if (r.remote && !r.dirty) continue;
+        await _push(r);
+        pushed++;
+        await ReportStore.saveAll(list);
+      }
+
+      // 2) استلام بلاغات الآخرين وتحديثاتهم
+      final rows = await _fetchRows();
+      final byId = {for (final r in list) r.id: r};
+      for (final row in rows) {
+        final id = row['id'] as String;
+        final local = byId[id];
+        if (local == null) {
+          final created = await _fromServer(row);
+          if (created != null) {
+            list.add(created);
+            pulled++;
+          }
+        } else {
+          local.no = (row['report_no'] as num?)?.toInt() ?? local.no;
+          final remoteUpdated =
+              DateTime.parse(row['updated_at'] as String).toLocal();
+          if (!local.dirty && remoteUpdated.isAfter(local.updatedAt)) {
+            await _applyServer(local, row);
+            pulled++;
+          }
+        }
+      }
+      await ReportStore.saveAll(list);
+      return SyncResult(pushed, pulled);
+    } on SyncException {
+      rethrow;
+    } catch (_) {
+      throw SyncException('مفيش اتصال بالإنترنت أو السيرفر مش بيرد');
+    } finally {
+      running = false;
+    }
+  }
+
+  static Future<String> _upload(String localPath, String name) async {
+    final bytes = await File(localPath).readAsBytes();
+    final res = await http
+        .post(
+          Uri.parse('$_base/storage/v1/object/report-photos/$name'),
+          headers: _headers({'Content-Type': 'image/jpeg'}),
+          body: bytes,
+        )
+        .timeout(const Duration(seconds: 90));
+    if (res.statusCode >= 200 && res.statusCode < 300) {
+      return '$_base/storage/v1/object/public/report-photos/$name';
+    }
+    throw SyncException(_explain(res.statusCode, 'رفع الصورة'));
+  }
+
+  static Future<void> _push(Report r) async {
+    final stamp = DateTime.now().millisecondsSinceEpoch;
+    if (r.imageUrl == null) {
+      r.imageUrl = await _upload(r.imagePath, '${r.id}_before_$stamp.jpg');
+    }
+    if (r.closedImagePath != null && r.closedImageUrl == null) {
+      r.closedImageUrl =
+          await _upload(r.closedImagePath!, '${r.id}_after_$stamp.jpg');
+    }
+
+    if (!r.remote) {
+      final res = await http
+          .post(
+            Uri.parse('$_base/rest/v1/reports'),
+            headers: _headers({
+              'Content-Type': 'application/json',
+              'Prefer': 'return=representation',
+            }),
+            body: jsonEncode(r.toServer()),
+          )
+          .timeout(_timeout);
+      if (res.statusCode == 200 || res.statusCode == 201) {
+        final data = jsonDecode(utf8.decode(res.bodyBytes)) as List;
+        if (data.isNotEmpty) {
+          final no = (data.first as Map)['report_no'];
+          if (no is num) r.no = no.toInt();
+        }
+        r.remote = true;
+        r.dirty = false;
+        return;
+      }
+      if (res.statusCode == 409) {
+        // البلاغ موجود أصلاً على السيرفر (محاولة سابقة اتقطعت): نحدّثه.
+        r.remote = true;
+      } else {
+        throw SyncException(_explain(res.statusCode, 'إرسال البلاغ'));
+      }
+    }
+
+    final res = await http
+        .patch(
+          Uri.parse('$_base/rest/v1/reports?id=eq.${r.id}'),
+          headers: _headers({
+            'Content-Type': 'application/json',
+            'Prefer': 'return=minimal',
+          }),
+          body: jsonEncode(r.toServer()),
+        )
+        .timeout(_timeout);
+    if (res.statusCode >= 200 && res.statusCode < 300) {
+      r.dirty = false;
+      return;
+    }
+    throw SyncException(_explain(res.statusCode, 'تحديث البلاغ'));
+  }
+
+  static Future<List<Map<String, dynamic>>> _fetchRows() async {
+    final res = await http
+        .get(
+          Uri.parse('$_base/rest/v1/reports?select=*&order=report_no.desc'),
+          headers: _headers(),
+        )
+        .timeout(_timeout);
+    if (res.statusCode != 200) {
+      throw SyncException(_explain(res.statusCode, 'تحميل البلاغات'));
+    }
+    return (jsonDecode(utf8.decode(res.bodyBytes)) as List)
+        .map((e) => e as Map<String, dynamic>)
+        .toList();
+  }
+
+  static Future<String?> _download(String url) async {
+    try {
+      final res = await http.get(Uri.parse(url)).timeout(_timeout);
+      if (res.statusCode != 200) return null;
+      final dir = await getApplicationDocumentsDirectory();
+      final f = File(
+          '${dir.path}/img_${DateTime.now().microsecondsSinceEpoch}.jpg');
+      await f.writeAsBytes(res.bodyBytes);
+      return f.path;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  static void _fill(Report r, Map<String, dynamic> row) {
+    r.no = (row['report_no'] as num?)?.toInt() ?? r.no;
+    r.createdAt = DateTime.parse(row['created_at'] as String).toLocal();
+    r.location = (row['location'] ?? '') as String;
+    r.type = (row['type'] ?? '') as String;
+    r.responsibility = (row['responsibility'] ?? '') as String;
+    r.severity = (row['severity'] ?? 'Medium') as String;
+    r.description = (row['description'] ?? '') as String;
+    r.impacts = ((row['impacts'] as List?) ?? const [])
+        .map((e) => e.toString())
+        .toList();
+    r.reporter = (row['reporter'] ?? '') as String;
+    r.status = (row['status'] ?? 'Open') as String;
+    r.correctiveAction = (row['corrective_action'] ?? '') as String;
+    r.dueDate = row['due_date'] == null
+        ? null
+        : DateTime.parse(row['due_date'] as String).toLocal();
+    r.closedAt = row['closed_at'] == null
+        ? null
+        : DateTime.parse(row['closed_at'] as String).toLocal();
+    r.lat = (row['lat'] as num?)?.toDouble();
+    r.lng = (row['lng'] as num?)?.toDouble();
+    r.updatedAt = DateTime.parse(row['updated_at'] as String).toLocal();
+  }
+
+  static Future<Report?> _fromServer(Map<String, dynamic> row) async {
+    final imageUrl = row['image_url'] as String?;
+    if (imageUrl == null) return null;
+    final img = await _download(imageUrl);
+    if (img == null) return null;
+
+    String? closedPath;
+    final closedUrl = row['closed_image_url'] as String?;
+    if (closedUrl != null) closedPath = await _download(closedUrl);
+
+    final r = Report(
+      id: row['id'] as String,
+      no: 0,
+      createdAt: DateTime.now(),
+      location: '',
+      type: '',
+      imagePath: img,
+    );
+    _fill(r, row);
+    r.imageUrl = imageUrl;
+    r.closedImagePath = closedPath;
+    r.closedImageUrl = closedPath == null ? null : closedUrl;
+    r.remote = true;
+    r.dirty = false;
+    return r;
+  }
+
+  static Future<void> _applyServer(
+      Report local, Map<String, dynamic> row) async {
+    _fill(local, row);
+    final closedUrl = row['closed_image_url'] as String?;
+    if (closedUrl != null && closedUrl != local.closedImageUrl) {
+      final p = await _download(closedUrl);
+      if (p != null) {
+        local.closedImagePath = p;
+        local.closedImageUrl = closedUrl;
+      }
+    }
+  }
+}
+
 // ═════════════════════════ التطبيق ═════════════════════════
 
 class EcoReportApp extends StatelessWidget {
@@ -954,7 +1482,11 @@ class EcoReportApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
+    return ListenableBuilder(
+      listenable: AppSettings.instance,
+      builder: (context, _) {
+        final s = AppSettings.instance;
+        return MaterialApp(
       title: 'رصد المخلفات',
       debugShowCheckedModeBanner: false,
       locale: const Locale('ar'),
@@ -964,14 +1496,28 @@ class EcoReportApp extends StatelessWidget {
         GlobalWidgetsLocalizations.delegate,
         GlobalCupertinoLocalizations.delegate,
       ],
-      theme: ThemeData(
-        useMaterial3: true,
-        colorSchemeSeed: const Color(0xFF2E7D32),
-        scaffoldBackgroundColor: const Color(0xFFF3F7F1),
-      ),
+      theme: _buildTheme(s.seed, Brightness.light),
+      darkTheme: _buildTheme(s.seed, Brightness.dark),
+      themeMode: s.themeMode,
+      builder: (context, child) {
+        final mq = MediaQuery.of(context);
+        return MediaQuery(
+          data: mq.copyWith(textScaler: TextScaler.linear(s.textScale)),
+          child: child ?? const SizedBox.shrink(),
+        );
+      },
       home: const AppShell(),
+        );
+      },
     );
   }
+}
+
+ThemeData _buildTheme(Color seed, Brightness brightness) {
+  return ThemeData(
+    useMaterial3: true,
+    colorScheme: ColorScheme.fromSeed(seedColor: seed, brightness: brightness),
+  );
 }
 
 class FilterResult {
@@ -994,11 +1540,23 @@ class _AppShellState extends State<AppShell> {
   String? _status;
   String? _type;
   String? _location;
+  bool _syncing = false;
 
   @override
   void initState() {
     super.initState();
-    _load();
+    AppSettings.instance.addListener(_onSettings);
+    _load().then((_) => _syncNow());
+  }
+
+  @override
+  void dispose() {
+    AppSettings.instance.removeListener(_onSettings);
+    super.dispose();
+  }
+
+  void _onSettings() {
+    if (mounted) setState(() {});
   }
 
   Future<void> _load() async {
@@ -1024,7 +1582,8 @@ class _AppShellState extends State<AppShell> {
       context,
       MaterialPageRoute(builder: (_) => const NewReportScreen()),
     );
-    _load();
+    await _load();
+    _syncNow();
   }
 
   Future<void> _openDetails(Report r) async {
@@ -1032,7 +1591,38 @@ class _AppShellState extends State<AppShell> {
       context,
       MaterialPageRoute(builder: (_) => DetailScreen(report: r)),
     );
-    _load();
+    await _load();
+    _syncNow();
+  }
+
+  Future<void> _syncNow({bool silent = true}) async {
+    final s = AppSettings.instance;
+    if (!s.syncActive || _syncing || SyncService.running) return;
+    setState(() => _syncing = true);
+    String msg;
+    try {
+      final r = await SyncService.sync();
+      s.setLastSync(DateTime.now());
+      msg = (r.pushed == 0 && r.pulled == 0)
+          ? 'كل حاجة محدّثة ✅'
+          : 'تمت المزامنة ✅  أُرسل ${r.pushed} • وصل ${r.pulled}';
+    } on SyncException catch (e) {
+      msg = 'فشلت المزامنة: ${e.message}';
+    } catch (_) {
+      msg = 'فشلت المزامنة، راجع الإنترنت';
+    }
+    if (!mounted) return;
+    setState(() => _syncing = false);
+    await _load();
+    if (!silent && mounted) snack(context, msg);
+  }
+
+  Future<void> _pullToRefresh() async {
+    if (AppSettings.instance.syncActive) {
+      await _syncNow(silent: false);
+    } else {
+      await _load();
+    }
   }
 
   Future<void> _openFilter() async {
@@ -1075,8 +1665,16 @@ class _AppShellState extends State<AppShell> {
                   onFilter: _openFilter,
                   onOpen: _openDetails,
                   onExport: _export,
+                  showSync: AppSettings.instance.syncActive,
+                  syncing: _syncing,
+                  onSync: () => _syncNow(silent: false),
+                  onRefresh: _pullToRefresh,
                 ),
                 MapTab(reports: _filtered, onOpen: _openDetails),
+                SettingsTab(
+                  syncing: _syncing,
+                  onSyncNow: () => _syncNow(silent: false),
+                ),
               ],
             ),
       floatingActionButton: _tab == 0
@@ -1099,6 +1697,11 @@ class _AppShellState extends State<AppShell> {
             icon: Icon(Icons.map_outlined),
             selectedIcon: Icon(Icons.map),
             label: 'الخريطة',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.settings_outlined),
+            selectedIcon: Icon(Icons.settings),
+            label: 'الإعدادات',
           ),
         ],
       ),
@@ -1184,6 +1787,10 @@ class ReportsTab extends StatelessWidget {
   final VoidCallback onFilter;
   final ValueChanged<Report> onOpen;
   final ValueChanged<String> onExport;
+  final bool showSync;
+  final bool syncing;
+  final VoidCallback onSync;
+  final Future<void> Function() onRefresh;
 
   const ReportsTab({
     super.key,
@@ -1195,6 +1802,10 @@ class ReportsTab extends StatelessWidget {
     required this.onFilter,
     required this.onOpen,
     required this.onExport,
+    required this.showSync,
+    required this.syncing,
+    required this.onSync,
+    required this.onRefresh,
   });
 
   @override
@@ -1209,13 +1820,17 @@ class ReportsTab extends StatelessWidget {
           width: double.infinity,
           padding: EdgeInsets.fromLTRB(
               16, MediaQuery.of(context).padding.top + 12, 16, 18),
-          decoration: const BoxDecoration(
+          decoration: BoxDecoration(
             gradient: LinearGradient(
-              colors: [Color(0xFF1B5E20), Color(0xFF43A047)],
+              colors: [
+                Color.lerp(AppSettings.instance.seed, Colors.black, 0.35)!,
+                AppSettings.instance.seed,
+              ],
               begin: Alignment.topRight,
               end: Alignment.bottomLeft,
             ),
-            borderRadius: BorderRadius.vertical(bottom: Radius.circular(28)),
+            borderRadius:
+                const BorderRadius.vertical(bottom: Radius.circular(28)),
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -1234,6 +1849,23 @@ class ReportsTab extends StatelessWidget {
                       ),
                     ),
                   ),
+                  if (showSync)
+                    syncing
+                        ? const Padding(
+                            padding: EdgeInsets.all(12),
+                            child: SizedBox(
+                              width: 22,
+                              height: 22,
+                              child: CircularProgressIndicator(
+                                  strokeWidth: 2, color: Colors.white),
+                            ),
+                          )
+                        : IconButton(
+                            tooltip: 'مزامنة مع السيرفر',
+                            onPressed: onSync,
+                            icon: const Icon(Icons.cloud_sync,
+                                color: Colors.white),
+                          ),
                   PopupMenuButton<String>(
                     tooltip: 'تصدير',
                     icon: const Icon(Icons.ios_share, color: Colors.white),
@@ -1295,7 +1927,8 @@ class ReportsTab extends StatelessWidget {
                 onPressed: onFilter,
                 icon: Icon(
                   hasExtraFilter ? Icons.filter_alt : Icons.filter_alt_outlined,
-                  color: hasExtraFilter ? Colors.green.shade800 : null,
+                  color:
+                      hasExtraFilter ? Theme.of(context).colorScheme.primary : null,
                 ),
               ),
             ],
@@ -1315,12 +1948,21 @@ class ReportsTab extends StatelessWidget {
                     ),
                   ),
                 )
-              : ListView.builder(
-                  padding: const EdgeInsets.only(bottom: 96),
-                  itemCount: filtered.length,
-                  itemBuilder: (_, i) => _ReportCard(
-                    r: filtered[i],
-                    onTap: () => onOpen(filtered[i]),
+              : RefreshIndicator(
+                  onRefresh: onRefresh,
+                  child: ListView.builder(
+                    physics: const AlwaysScrollableScrollPhysics(),
+                    padding: const EdgeInsets.only(bottom: 96),
+                    itemCount: filtered.length,
+                    itemBuilder: (_, i) => AppSettings.instance.cardStyle == 1
+                        ? _LargeCard(
+                            r: filtered[i],
+                            onTap: () => onOpen(filtered[i]),
+                          )
+                        : _ReportCard(
+                            r: filtered[i],
+                            onTap: () => onOpen(filtered[i]),
+                          ),
                   ),
                 ),
         ),
@@ -1396,7 +2038,7 @@ class _ReportCard extends StatelessWidget {
                     children: [
                       Row(
                         children: [
-                          Text('#${r.no}',
+                          Text(noLabel(r),
                               style: const TextStyle(
                                   fontWeight: FontWeight.bold, fontSize: 15)),
                           const SizedBox(width: 8),
@@ -1455,6 +2097,18 @@ class _ReportCard extends StatelessWidget {
                             size: 16,
                             color: r.hasLocation ? Colors.green : Colors.grey,
                           ),
+                          if (AppSettings.instance.syncActive) ...[
+                            const SizedBox(width: 6),
+                            Icon(
+                              r.remote && !r.dirty
+                                  ? Icons.cloud_done
+                                  : Icons.cloud_upload_outlined,
+                              size: 16,
+                              color: r.remote && !r.dirty
+                                  ? Colors.green
+                                  : Colors.orange,
+                            ),
+                          ],
                         ],
                       ),
                     ],
@@ -1464,6 +2118,394 @@ class _ReportCard extends StatelessWidget {
             ],
           ),
         ),
+      ),
+    );
+  }
+}
+
+class _LargeCard extends StatelessWidget {
+  final Report r;
+  final VoidCallback onTap;
+  const _LargeCard({required this.r, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    final overdue = isOverdue(r);
+    return Card(
+      margin: const EdgeInsets.fromLTRB(14, 6, 14, 6),
+      clipBehavior: Clip.antiAlias,
+      elevation: 1.5,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+      child: InkWell(
+        onTap: onTap,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Stack(
+              children: [
+                AspectRatio(aspectRatio: 16 / 9, child: _Photo(r.imagePath)),
+                Positioned(
+                  top: 10,
+                  right: 10,
+                  child: _Badge(
+                      arOf(kStatuses, r.status), statusColor(r.status)),
+                ),
+                Positioned(
+                  top: 10,
+                  left: 10,
+                  child: _Badge(noLabel(r), Colors.black54),
+                ),
+              ],
+            ),
+            Padding(
+              padding: const EdgeInsets.all(12),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    OptionStore.ar('location', r.location),
+                    style: const TextStyle(
+                        fontWeight: FontWeight.bold, fontSize: 16),
+                  ),
+                  const SizedBox(height: 4),
+                  Wrap(
+                    spacing: 6,
+                    runSpacing: 4,
+                    children: [
+                      _Badge(OptionStore.ar('type', r.type),
+                          const Color(0xFF455A64)),
+                      if (overdue)
+                        const _Badge('متأخر', Color(0xFFB71C1C),
+                            icon: Icons.schedule),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    r.description.isEmpty ? 'بدون وصف' : r.description,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  const SizedBox(height: 8),
+                  Row(
+                    children: [
+                      const Icon(Icons.access_time,
+                          size: 16, color: Colors.grey),
+                      const SizedBox(width: 4),
+                      Text(fmtDate(r.createdAt),
+                          style: const TextStyle(
+                              color: Colors.grey, fontSize: 12)),
+                      const Spacer(),
+                      Icon(Icons.circle,
+                          size: 10, color: severityColor(r.severity)),
+                      const SizedBox(width: 4),
+                      Text(arOf(kSeverities, r.severity),
+                          style: const TextStyle(fontSize: 12)),
+                      const SizedBox(width: 8),
+                      Icon(
+                        r.hasLocation ? Icons.location_on : Icons.location_off,
+                        size: 18,
+                        color: r.hasLocation ? Colors.green : Colors.grey,
+                      ),
+                      if (AppSettings.instance.syncActive) ...[
+                        const SizedBox(width: 6),
+                        Icon(
+                          r.remote && !r.dirty
+                              ? Icons.cloud_done
+                              : Icons.cloud_upload_outlined,
+                          size: 18,
+                          color: r.remote && !r.dirty
+                              ? Colors.green
+                              : Colors.orange,
+                        ),
+                      ],
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ═════════════════════════ تبويب الإعدادات ═════════════════════════
+
+class SettingsTab extends StatefulWidget {
+  final bool syncing;
+  final VoidCallback onSyncNow;
+  const SettingsTab({
+    super.key,
+    required this.syncing,
+    required this.onSyncNow,
+  });
+
+  @override
+  State<SettingsTab> createState() => _SettingsTabState();
+}
+
+class _SettingsTabState extends State<SettingsTab> {
+  final AppSettings s = AppSettings.instance;
+  late final TextEditingController _url =
+      TextEditingController(text: s.serverUrl);
+  late final TextEditingController _key =
+      TextEditingController(text: s.serverKey);
+  late final TextEditingController _name =
+      TextEditingController(text: s.reporterName);
+  bool _testing = false;
+  bool _testOk = false;
+  String? _testMsg;
+
+  @override
+  void dispose() {
+    _url.dispose();
+    _key.dispose();
+    _name.dispose();
+    super.dispose();
+  }
+
+  Future<void> _test() async {
+    if (_url.text.trim().isEmpty || _key.text.trim().isEmpty) {
+      setState(() {
+        _testOk = false;
+        _testMsg = 'اكتب رابط السيرفر والمفتاح الأول';
+      });
+      return;
+    }
+    setState(() {
+      _testing = true;
+      _testMsg = null;
+    });
+    final msg = await SyncService.testConnection();
+    if (!mounted) return;
+    setState(() {
+      _testing = false;
+      _testOk = msg == 'ok';
+      _testMsg = msg == 'ok' ? 'تم الاتصال بالسيرفر بنجاح ✅' : msg;
+    });
+  }
+
+  Future<void> _copySql() async {
+    await Clipboard.setData(const ClipboardData(text: kSetupSql));
+    if (mounted) snack(context, 'تم نسخ السكربت. الزقه في Supabase ثم Run');
+  }
+
+  Widget _section(String title, IconData icon, List<Widget> children) {
+    return Card(
+      margin: const EdgeInsets.only(bottom: 14),
+      child: Padding(
+        padding: const EdgeInsets.all(14),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(icon),
+                const SizedBox(width: 8),
+                Text(title, style: Theme.of(context).textTheme.titleMedium),
+              ],
+            ),
+            const SizedBox(height: 12),
+            ...children,
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _label(String t) => Padding(
+        padding: const EdgeInsets.only(top: 6, bottom: 6),
+        child: Text(t, style: const TextStyle(fontWeight: FontWeight.bold)),
+      );
+
+  Widget _chip(String label, bool selected, VoidCallback onTap,
+      {IconData? icon}) {
+    return ChoiceChip(
+      avatar: icon == null ? null : Icon(icon, size: 18),
+      label: Text(label),
+      selected: selected,
+      onSelected: (_) => onTap(),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final last = s.lastSync;
+    final lastText = last == null
+        ? 'لسه ماتمتش مزامنة'
+        : 'آخر مزامنة: ${fmtDate(last)}  ${_two(last.hour)}:${_two(last.minute)}';
+
+    return Scaffold(
+      appBar: AppBar(title: const Text('الإعدادات')),
+      body: ListView(
+        padding: const EdgeInsets.all(14),
+        children: [
+          _section('المظهر', Icons.palette_outlined, [
+            _label('نمط الألوان'),
+            Wrap(
+              spacing: 8,
+              runSpacing: 4,
+              children: [
+                _chip('تلقائي', s.themeMode == ThemeMode.system,
+                    () => s.setThemeMode(ThemeMode.system),
+                    icon: Icons.brightness_auto),
+                _chip('فاتح', s.themeMode == ThemeMode.light,
+                    () => s.setThemeMode(ThemeMode.light),
+                    icon: Icons.light_mode),
+                _chip('داكن', s.themeMode == ThemeMode.dark,
+                    () => s.setThemeMode(ThemeMode.dark),
+                    icon: Icons.dark_mode),
+              ],
+            ),
+            _label('لون التطبيق'),
+            Wrap(
+              spacing: 10,
+              runSpacing: 10,
+              children: [
+                for (var i = 0; i < AppSettings.seeds.length; i++)
+                  Tooltip(
+                    message: AppSettings.seedNames[i],
+                    child: GestureDetector(
+                      onTap: () => s.setSeed(i),
+                      child: Container(
+                        width: 44,
+                        height: 44,
+                        decoration: BoxDecoration(
+                          color: AppSettings.seeds[i],
+                          shape: BoxShape.circle,
+                          border: Border.all(
+                            color: s.seedIndex == i
+                                ? cs.onSurface
+                                : Colors.transparent,
+                            width: 3,
+                          ),
+                        ),
+                        child: s.seedIndex == i
+                            ? const Icon(Icons.check, color: Colors.white)
+                            : null,
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+            _label('شكل قايمة البلاغات'),
+            Wrap(
+              spacing: 8,
+              children: [
+                _chip('مضغوطة', s.cardStyle == 0, () => s.setCardStyle(0),
+                    icon: Icons.view_list),
+                _chip('بطاقات كبيرة', s.cardStyle == 1,
+                    () => s.setCardStyle(1),
+                    icon: Icons.view_agenda),
+              ],
+            ),
+            _label('حجم الخط'),
+            Wrap(
+              spacing: 8,
+              children: [
+                _chip('صغير', s.textSize == 0, () => s.setTextSize(0)),
+                _chip('عادي', s.textSize == 1, () => s.setTextSize(1)),
+                _chip('كبير', s.textSize == 2, () => s.setTextSize(2)),
+                _chip('كبير جداً', s.textSize == 3, () => s.setTextSize(3)),
+              ],
+            ),
+          ]),
+          _section('بياناتي', Icons.person_outline, [
+            TextField(
+              controller: _name,
+              decoration: deco('اسمي (بيتكتب تلقائي في البلاغات)',
+                  icon: Icons.badge_outlined),
+              onChanged: s.setReporterName,
+            ),
+          ]),
+          _section('السيرفر والمزامنة', Icons.cloud_outlined, [
+            SwitchListTile(
+              contentPadding: EdgeInsets.zero,
+              title: const Text('تفعيل المزامنة مع السيرفر'),
+              subtitle: const Text(
+                  'البلاغات بتتبعت للسيرفر وتشوف بلاغات باقي المستخدمين'),
+              value: s.syncEnabled,
+              onChanged: s.setSyncEnabled,
+            ),
+            const SizedBox(height: 8),
+            TextField(
+              controller: _url,
+              keyboardType: TextInputType.url,
+              textDirection: TextDirection.ltr,
+              decoration: deco('رابط السيرفر (Project URL)',
+                  hint: 'https://xxxx.supabase.co', icon: Icons.link),
+              onChanged: s.setServerUrl,
+            ),
+            const SizedBox(height: 10),
+            TextField(
+              controller: _key,
+              textDirection: TextDirection.ltr,
+              decoration: deco('المفتاح (anon / publishable key)',
+                  icon: Icons.key),
+              onChanged: s.setServerKey,
+            ),
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: _testing ? null : _test,
+                    icon: _testing
+                        ? const SizedBox(
+                            width: 16,
+                            height: 16,
+                            child: CircularProgressIndicator(strokeWidth: 2))
+                        : const Icon(Icons.wifi_tethering),
+                    label: const Text('اختبار الاتصال'),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: FilledButton.icon(
+                    onPressed:
+                        (s.syncActive && !widget.syncing) ? widget.onSyncNow : null,
+                    icon: const Icon(Icons.cloud_sync),
+                    label: const Text('مزامنة الآن'),
+                  ),
+                ),
+              ],
+            ),
+            if (_testMsg != null)
+              Padding(
+                padding: const EdgeInsets.only(top: 8),
+                child: Text(
+                  _testMsg!,
+                  style: TextStyle(
+                    color: _testOk ? Colors.green : cs.error,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+            const SizedBox(height: 8),
+            Text(lastText,
+                style: const TextStyle(color: Colors.grey, fontSize: 12)),
+            const SizedBox(height: 10),
+            OutlinedButton.icon(
+              onPressed: _copySql,
+              icon: const Icon(Icons.copy),
+              label: const Text('نسخ سكربت إعداد قاعدة البيانات'),
+            ),
+            const SizedBox(height: 8),
+            const Text(
+              'ملاحظة: البلاغ اللي اتبعت للسيرفر مبيتمسحش (سجل رسمي)، بس بيتقفل من "تحديث الحالة". رقم البلاغ بيتحدد من السيرفر.',
+              style: TextStyle(color: Colors.grey, fontSize: 12),
+            ),
+          ]),
+          _section('عن التطبيق', Icons.info_outline, const [
+            Text('رصد المخلفات البيئية'),
+            SizedBox(height: 4),
+            Text('الإصدار 1.3.0',
+                style: TextStyle(color: Colors.grey, fontSize: 12)),
+          ]),
+          const SizedBox(height: 20),
+        ],
       ),
     );
   }
@@ -1499,7 +2541,7 @@ class MapTab extends StatelessWidget {
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     Text(
-                      '#${r.no}  ${OptionStore.ar('location', r.location)}',
+                      '${noLabel(r)}  ${OptionStore.ar('location', r.location)}',
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: const TextStyle(fontWeight: FontWeight.bold),
@@ -1607,7 +2649,7 @@ class MapTab extends StatelessWidget {
           child: Container(
             padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
             decoration: BoxDecoration(
-              color: Colors.white,
+              color: Theme.of(context).colorScheme.surface,
               borderRadius: BorderRadius.circular(20),
               boxShadow: const [
                 BoxShadow(color: Color(0x33000000), blurRadius: 6),
@@ -1668,11 +2710,9 @@ class _NewReportScreenState extends State<NewReportScreen> {
   }
 
   Future<void> _loadReporter() async {
-    try {
-      final p = await SharedPreferences.getInstance();
-      final name = p.getString('reporter_name') ?? '';
-      if (mounted && _reporterCtrl.text.isEmpty) _reporterCtrl.text = name;
-    } catch (_) {}
+    if (_reporterCtrl.text.isEmpty) {
+      _reporterCtrl.text = AppSettings.instance.reporterName;
+    }
   }
 
   Future<void> _getLocation() async {
@@ -1768,17 +2808,21 @@ class _NewReportScreenState extends State<NewReportScreen> {
         dueDate: _due,
         lat: _position?.latitude,
         lng: _position?.longitude,
+        updatedAt: now,
       );
       final saved = await ReportStore.add(r);
-      try {
-        final p = await SharedPreferences.getInstance();
-        await p.setString('reporter_name', r.reporter);
-      } catch (_) {}
+      if (r.reporter.isNotEmpty) {
+        AppSettings.instance.setReporterName(r.reporter);
+      }
       if (!mounted) return;
       final messenger = ScaffoldMessenger.of(context);
       Navigator.pop(context, true);
       messenger.showSnackBar(
-        SnackBar(content: Text('تم تسجيل البلاغ رقم ${saved.no} ✅')),
+        SnackBar(
+          content: Text(saved.no == 0
+              ? 'تم تسجيل البلاغ ✅'
+              : 'تم تسجيل البلاغ رقم ${saved.no} ✅'),
+        ),
       );
     } catch (_) {
       if (mounted) {
@@ -1800,9 +2844,11 @@ class _NewReportScreenState extends State<NewReportScreen> {
             child: Container(
               height: 220,
               decoration: BoxDecoration(
-                color: Colors.white,
+                color: Theme.of(context).colorScheme.surfaceContainerHighest,
                 borderRadius: BorderRadius.circular(18),
-                border: Border.all(color: Colors.green.shade200, width: 2),
+                border: Border.all(
+                    color: Theme.of(context).colorScheme.primary.withAlpha(110),
+                    width: 2),
               ),
               clipBehavior: Clip.antiAlias,
               child: _photo == null
@@ -2050,13 +3096,15 @@ class _DetailScreenState extends State<DetailScreen> {
     final overdue = isOverdue(r);
     return Scaffold(
       appBar: AppBar(
-        title: Text('بلاغ رقم ${r.no}'),
+        title: Text('بلاغ ${noText(r)}'),
         actions: [
-          IconButton(
-            tooltip: 'حذف',
-            icon: const Icon(Icons.delete_outline),
-            onPressed: _confirmDelete,
-          ),
+          // البلاغ اللي اتبعت للسيرفر مبيتمسحش (سجل رسمي)، بس بيتقفل.
+          if (!r.remote)
+            IconButton(
+              tooltip: 'حذف',
+              icon: const Icon(Icons.delete_outline),
+              onPressed: _confirmDelete,
+            ),
         ],
       ),
       body: ListView(
@@ -2267,8 +3315,11 @@ class _UpdateSheetState extends State<UpdateSheet> {
       _copy.status = _status;
       _copy.correctiveAction = _action.text.trim();
       _copy.dueDate = _due;
+      _copy.dirty = true;
+      _copy.updatedAt = DateTime.now();
       if (_newPhoto != null) {
         _copy.closedImagePath = await ReportStore.copyImage(_newPhoto!);
+        _copy.closedImageUrl = null;
       }
       if (_status == 'Closed') {
         _copy.closedAt ??= DateTime.now();
