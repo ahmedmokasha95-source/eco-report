@@ -45,6 +45,8 @@ class Opt {
   final String en;
   final String ar;
   const Opt(this.en, this.ar);
+  /// الاسم المعروض حسب اللغة المختارة.
+  String get text => AppSettings.instance.lang == 'en' ? en : ar;
   String get label => AppSettings.instance.lang == 'en'
       ? en
       : (en == ar ? ar : '$ar  ·  $en');
@@ -1959,7 +1961,7 @@ class ReportsTab extends StatelessWidget {
                       Padding(
                         padding: const EdgeInsets.symmetric(horizontal: 4),
                         child: ChoiceChip(
-                          label: Text(s.ar),
+                          label: Text(s.text),
                           selected: status == s.en,
                           onSelected: (_) =>
                               onStatus(status == s.en ? null : s.en),
@@ -3017,7 +3019,7 @@ class _NewReportScreenState extends State<NewReportScreen> {
             children: [
               for (final s in kSeverities)
                 ChoiceChip(
-                  label: Text(s.ar),
+                  label: Text(s.text),
                   selected: _severity == s.en,
                   selectedColor: severityColor(s.en).withAlpha(70),
                   onSelected: (_) => setState(() => _severity = s.en),
@@ -3072,7 +3074,7 @@ class _NewReportScreenState extends State<NewReportScreen> {
                     children: [
                       for (final i in kImpacts)
                         FilterChip(
-                          label: Text(i.ar),
+                          label: Text(i.text),
                           selected: _impacts.contains(i.en),
                           onSelected: (v) => setState(() {
                             if (v) {
@@ -3456,7 +3458,7 @@ class _UpdateSheetState extends State<UpdateSheet> {
                 children: [
                   for (final s in kStatuses)
                     ChoiceChip(
-                      label: Text(s.ar),
+                      label: Text(s.text),
                       selected: _status == s.en,
                       selectedColor: statusColor(s.en).withAlpha(70),
                       onSelected: (_) => setState(() => _status = s.en),

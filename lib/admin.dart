@@ -689,7 +689,7 @@ class _FactoryReportsScreenState extends State<FactoryReportsScreen> {
                         Padding(
                           padding: const EdgeInsets.symmetric(horizontal: 4),
                           child: ChoiceChip(
-                            label: Text(s.ar),
+                            label: Text(s.text),
                             selected: _status == s.en,
                             onSelected: (_) => setState(
                                 () => _status = _status == s.en ? null : s.en),
