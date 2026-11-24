@@ -474,4 +474,16 @@ const Map<String, String> _kEn = {
       'Environmental violations register',
   'بعد المعالجة':
       'After correction',
+  'بلاغ في {0} مصنع':
+      'reports across {0} factories',
+  'نسبة الإغلاق':
+      'Closure rate',
+  '{0} مفتوح':
+      '{0} open',
+  '{0} جاري':
+      '{0} in progress',
+  '{0} مغلق':
+      '{0} closed',
+  'لسه مفيش بلاغات':
+      'No reports yet',
 };
