@@ -1036,24 +1036,57 @@ class AppSettings extends ChangeNotifier {
 
   static const List<Color> seeds = [
     Color(0xFF2E7D32),
-    Color(0xFF1565C0),
     Color(0xFF00796B),
-    Color(0xFFE65100),
+    Color(0xFF00897B),
+    Color(0xFF558B2F),
+    Color(0xFF9E9D24),
+    Color(0xFF1565C0),
+    Color(0xFF0277BD),
+    Color(0xFF283593),
+    Color(0xFF3949AB),
     Color(0xFF6A1B9A),
+    Color(0xFF8E24AA),
+    Color(0xFFAD1457),
+    Color(0xFFD81B60),
     Color(0xFFC62828),
+    Color(0xFFE65100),
+    Color(0xFFEF6C00),
+    Color(0xFFF9A825),
+    Color(0xFFFF8F00),
     Color(0xFF5D4037),
+    Color(0xFF795548),
     Color(0xFF37474F),
+    Color(0xFF546E7A),
+    Color(0xFF212121),
+    Color(0xFFB8860B),
   ];
   static const List<String> seedNames = [
     'أخضر',
-    'أزرق',
     'تركواز',
-    'برتقالي',
+    'أخضر مائي',
+    'أخضر زيتي',
+    'ليموني',
+    'أزرق',
+    'أزرق سماوي',
+    'كحلي',
+    'نيلي',
     'بنفسجي',
+    'أرجواني',
+    'وردي غامق',
+    'وردي',
     'أحمر',
+    'برتقالي',
+    'برتقالي فاتح',
+    'أصفر',
+    'عنبري',
     'بني',
+    'بني فاتح',
     'رمادي',
+    'رمادي مزرق',
+    'أسود',
+    'ذهبي',
   ];
+  Color customSeed = const Color(0xFF2E7D32);
   static const List<double> textScales = [0.9, 1.0, 1.15, 1.3];
 
   ThemeMode themeMode = ThemeMode.system;
@@ -1067,7 +1100,7 @@ class AppSettings extends ChangeNotifier {
   String reporterName = '';
   DateTime? lastSync;
 
-  Color get seed => seeds[seedIndex];
+  Color get seed => seedIndex < 0 ? customSeed : seeds[seedIndex];
   double get textScale => textScales[textSize];
 
   bool get syncActive =>
@@ -1088,7 +1121,8 @@ class AppSettings extends ChangeNotifier {
     try {
       final p = await SharedPreferences.getInstance();
       themeMode = ThemeMode.values[_ci(p.getInt('set_theme') ?? 0, 0, 2)];
-      seedIndex = _ci(p.getInt('set_seed') ?? 0, 0, seeds.length - 1);
+      seedIndex = _ci(p.getInt('set_seed') ?? 0, -1, seeds.length - 1);
+      customSeed = Color(p.getInt('set_seed_custom') ?? 0xFF2E7D32);
       cardStyle = _ci(p.getInt('set_cards') ?? 0, 0, 1);
       textSize = _ci(p.getInt('set_text') ?? 1, 0, textScales.length - 1);
       lang = p.getString('set_lang') == 'en' ? 'en' : 'ar';
@@ -1113,6 +1147,7 @@ class AppSettings extends ChangeNotifier {
       final p = await SharedPreferences.getInstance();
       await p.setInt('set_theme', themeMode.index);
       await p.setInt('set_seed', seedIndex);
+      await p.setInt('set_seed_custom', customSeed.toARGB32());
       await p.setInt('set_cards', cardStyle);
       await p.setInt('set_text', textSize);
       await p.setString('set_lang', lang);
@@ -1138,6 +1173,12 @@ class AppSettings extends ChangeNotifier {
 
   void setSeed(int i) {
     seedIndex = i;
+    _changed();
+  }
+
+  void setCustomSeed(Color c) {
+    customSeed = c;
+    seedIndex = -1;
     _changed();
   }
 
@@ -2392,6 +2433,8 @@ class _SettingsTabState extends State<SettingsTab> {
         children: [
           if (Session.instance.loggedIn)
             _section(tr('حسابي'), Icons.account_circle_outlined, [
+              const Center(child: ProfileAvatarEditor()),
+              const SizedBox(height: 12),
               Text(
                 Session.instance.fullName.isEmpty
                     ? Session.instance.username
@@ -2472,8 +2515,8 @@ class _SettingsTabState extends State<SettingsTab> {
                     child: GestureDetector(
                       onTap: () => s.setSeed(i),
                       child: Container(
-                        width: 44,
-                        height: 44,
+                        width: 40,
+                        height: 40,
                         decoration: BoxDecoration(
                           color: AppSettings.seeds[i],
                           shape: BoxShape.circle,
@@ -2490,6 +2533,32 @@ class _SettingsTabState extends State<SettingsTab> {
                       ),
                     ),
                   ),
+                Tooltip(
+                  message: tr('لون مخصص'),
+                  child: GestureDetector(
+                    onTap: () => showCustomColorSheet(context),
+                    child: Container(
+                      width: 40,
+                      height: 40,
+                      decoration: BoxDecoration(
+                        gradient: const SweepGradient(colors: [
+                          Colors.red, Colors.yellow, Colors.green,
+                          Colors.cyan, Colors.blue, Colors.purple, Colors.red
+                        ]),
+                        shape: BoxShape.circle,
+                        border: Border.all(
+                          color: s.seedIndex < 0
+                              ? cs.onSurface
+                              : Colors.transparent,
+                          width: 3,
+                        ),
+                      ),
+                      child: Icon(
+                          s.seedIndex < 0 ? Icons.check : Icons.colorize,
+                          color: Colors.white),
+                    ),
+                  ),
+                ),
               ],
             ),
             _label(tr('شكل قايمة البلاغات')),
@@ -3527,6 +3596,235 @@ class _UpdateSheetState extends State<UpdateSheet> {
             ],
           ),
         ),
+      ),
+    );
+  }
+}
+
+
+// ===== الصورة الشخصية (محفوظة على الجهاز) =====
+class AvatarStore extends ChangeNotifier {
+  AvatarStore._();
+  static final AvatarStore instance = AvatarStore._();
+  Uint8List? _bytes;
+  String? _uid;
+
+  Uint8List? get bytes => _bytes;
+
+  Future<void> load() async {
+    final uid = Session.instance.userId;
+    if (uid == _uid && _bytes != null) return;
+    _uid = uid;
+    _bytes = null;
+    if (uid != null) {
+      try {
+        final p = await SharedPreferences.getInstance();
+        final s = p.getString('avatar_$uid');
+        if (s != null) _bytes = base64Decode(s);
+      } catch (_) {}
+    }
+    notifyListeners();
+  }
+
+  Future<void> set(Uint8List? b) async {
+    final uid = Session.instance.userId;
+    if (uid == null) return;
+    final p = await SharedPreferences.getInstance();
+    if (b == null) {
+      await p.remove('avatar_$uid');
+    } else {
+      await p.setString('avatar_$uid', base64Encode(b));
+    }
+    _uid = uid;
+    _bytes = b;
+    notifyListeners();
+  }
+}
+
+class UserAvatar extends StatelessWidget {
+  final double radius;
+  const UserAvatar({super.key, this.radius = 28});
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    return ListenableBuilder(
+      listenable: AvatarStore.instance,
+      builder: (_, __) {
+        final b = AvatarStore.instance.bytes;
+        final name = Session.instance.fullName.isEmpty
+            ? Session.instance.username
+            : Session.instance.fullName;
+        final initial = name.trim().isEmpty ? '?' : name.trim().characters.first.toUpperCase();
+        return CircleAvatar(
+          radius: radius,
+          backgroundColor: cs.primaryContainer,
+          foregroundColor: cs.onPrimaryContainer,
+          backgroundImage: b == null ? null : MemoryImage(b),
+          child: b == null
+              ? Text(initial,
+                  style: TextStyle(
+                      fontSize: radius * 0.9, fontWeight: FontWeight.bold))
+              : null,
+        );
+      },
+    );
+  }
+}
+
+class ProfileAvatarEditor extends StatefulWidget {
+  const ProfileAvatarEditor({super.key});
+  @override
+  State<ProfileAvatarEditor> createState() => _ProfileAvatarEditorState();
+}
+
+class _ProfileAvatarEditorState extends State<ProfileAvatarEditor> {
+  @override
+  void initState() {
+    super.initState();
+    AvatarStore.instance.load();
+  }
+
+  Future<void> _pick(ImageSource src) async {
+    try {
+      final f = await ImagePicker()
+          .pickImage(source: src, maxWidth: 512, maxHeight: 512, imageQuality: 80);
+      if (f == null) return;
+      await AvatarStore.instance.set(await f.readAsBytes());
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text(tr('تعذّر اختيار الصورة'))));
+      }
+    }
+  }
+
+  void _menu() {
+    showModalBottomSheet(
+      context: context,
+      builder: (ctx) => SafeArea(
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          ListTile(
+            leading: const Icon(Icons.photo_library_outlined),
+            title: Text(tr('اختيار من المعرض')),
+            onTap: () {
+              Navigator.pop(ctx);
+              _pick(ImageSource.gallery);
+            },
+          ),
+          ListTile(
+            leading: const Icon(Icons.photo_camera_outlined),
+            title: Text(tr('التقاط صورة')),
+            onTap: () {
+              Navigator.pop(ctx);
+              _pick(ImageSource.camera);
+            },
+          ),
+          if (AvatarStore.instance.bytes != null)
+            ListTile(
+              leading: const Icon(Icons.delete_outline),
+              title: Text(tr('حذف الصورة')),
+              onTap: () {
+                Navigator.pop(ctx);
+                AvatarStore.instance.set(null);
+              },
+            ),
+        ]),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    return GestureDetector(
+      onTap: _menu,
+      child: Stack(children: [
+        const UserAvatar(radius: 44),
+        PositionedDirectional(
+          end: 0,
+          bottom: 0,
+          child: CircleAvatar(
+            radius: 14,
+            backgroundColor: cs.primary,
+            child: Icon(Icons.edit, size: 15, color: cs.onPrimary),
+          ),
+        ),
+      ]),
+    );
+  }
+}
+
+// ===== منتقي لون مخصص =====
+void showCustomColorSheet(BuildContext context) {
+  showModalBottomSheet(
+    context: context,
+    isScrollControlled: true,
+    builder: (_) => const _CustomColorSheet(),
+  );
+}
+
+class _CustomColorSheet extends StatefulWidget {
+  const _CustomColorSheet();
+  @override
+  State<_CustomColorSheet> createState() => _CustomColorSheetState();
+}
+
+class _CustomColorSheetState extends State<_CustomColorSheet> {
+  late HSVColor hsv;
+  @override
+  void initState() {
+    super.initState();
+    final c = AppSettings.instance.seed;
+    hsv = HSVColor.fromColor(c);
+    if (hsv.saturation < 0.2) hsv = hsv.withSaturation(0.6);
+    if (hsv.value < 0.3) hsv = hsv.withValue(0.6);
+  }
+
+  void _upd(HSVColor h) {
+    setState(() => hsv = h);
+    AppSettings.instance.setCustomSeed(h.toColor());
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final c = hsv.toColor();
+    return SafeArea(
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(20, 16, 20, 20),
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          Row(children: [
+            Container(
+                width: 44,
+                height: 44,
+                decoration: BoxDecoration(color: c, shape: BoxShape.circle)),
+            const SizedBox(width: 12),
+            Text(tr('لون مخصص'),
+                style: const TextStyle(
+                    fontSize: 18, fontWeight: FontWeight.bold)),
+          ]),
+          const SizedBox(height: 8),
+          Text(tr('درجة اللون')),
+          Slider(
+              value: hsv.hue,
+              min: 0,
+              max: 359,
+              activeColor: HSVColor.fromAHSV(1, hsv.hue, 1, 1).toColor(),
+              onChanged: (v) => _upd(hsv.withHue(v))),
+          Text(tr('التشبّع')),
+          Slider(
+              value: hsv.saturation,
+              onChanged: (v) => _upd(hsv.withSaturation(v))),
+          Text(tr('الإضاءة')),
+          Slider(
+              value: hsv.value.clamp(0.2, 1.0),
+              min: 0.2,
+              max: 1,
+              onChanged: (v) => _upd(hsv.withValue(v))),
+          const SizedBox(height: 8),
+          FilledButton(
+              onPressed: () => Navigator.pop(context), child: Text(tr('تم'))),
+        ]),
       ),
     );
   }
