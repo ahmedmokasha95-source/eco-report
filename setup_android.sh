@@ -19,7 +19,7 @@ perms = """
 if "android.permission.INTERNET" not in s:
     s = re.sub(r"(<manifest[^>]*>)", r"\1" + perms, s, count=1)
 
-s = re.sub(r'android:label="[^"]*"', 'android:label="رصد المخلفات"', s, count=1)
+s = re.sub(r'android:label="[^"]*"', 'android:label="بلّاغ"', s, count=1)
 open(p, "w", encoding="utf-8").write(s)
 print("Manifest patched")
 PY
@@ -58,3 +58,25 @@ for p in glob.glob("android/app/build.gradle*"):
     open(p, "w", encoding="utf-8").write(t)
 print("Biometric Android settings patched")
 PY
+
+# ── أيقونة التطبيق (ورقة شجر + إشارة) ──
+python3 - <<'PY2'
+import os, shutil
+res = "android/app/src/main/res"
+for d in ["mdpi", "hdpi", "xhdpi", "xxhdpi", "xxxhdpi"]:
+    os.makedirs(f"{res}/mipmap-{d}", exist_ok=True)
+    for n in ["ic_launcher.png", "ic_launcher_foreground.png"]:
+        shutil.copy(f"icon_assets/{d}/{n}", f"{res}/mipmap-{d}/{n}")
+os.makedirs(f"{res}/mipmap-anydpi-v26", exist_ok=True)
+open(f"{res}/mipmap-anydpi-v26/ic_launcher.xml", "w").write(
+    '<?xml version="1.0" encoding="utf-8"?>\n'
+    '<adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">\n'
+    '    <background android:drawable="@color/ic_launcher_background"/>\n'
+    '    <foreground android:drawable="@mipmap/ic_launcher_foreground"/>\n'
+    '</adaptive-icon>\n')
+os.makedirs(f"{res}/values", exist_ok=True)
+open(f"{res}/values/ic_launcher_background.xml", "w").write(
+    '<?xml version="1.0" encoding="utf-8"?>\n<resources>\n'
+    '    <color name="ic_launcher_background">#0B1F1A</color>\n</resources>\n')
+print("Launcher icon installed")
+PY2
