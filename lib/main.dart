@@ -45,7 +45,9 @@ class Opt {
   final String en;
   final String ar;
   const Opt(this.en, this.ar);
-  String get label => en == ar ? ar : '$ar  ·  $en';
+  String get label => AppSettings.instance.lang == 'en'
+      ? en
+      : (en == ar ? ar : '$ar  ·  $en');
 }
 
 const List<Opt> kStatuses = [
@@ -69,7 +71,7 @@ const List<Opt> kImpacts = [
 
 String arOf(List<Opt> list, String en) {
   for (final o in list) {
-    if (o.en == en) return o.ar;
+    if (o.en == en) return AppSettings.instance.lang == 'en' ? o.en : o.ar;
   }
   return en;
 }
@@ -437,8 +439,8 @@ class ReportStore {
 
 // ═════════════════════════ أدوات مساعدة ═════════════════════════
 
-String noLabel(Report r) => r.no == 0 ? 'جديد' : '#${r.no}';
-String noText(Report r) => r.no == 0 ? 'جديد' : 'رقم ${r.no}';
+String noLabel(Report r) => r.no == 0 ? tr('جديد') : '#${r.no}';
+String noText(Report r) => r.no == 0 ? tr('جديد') : trf('رقم {0}', [r.no]);
 
 String _two(int n) => n.toString().padLeft(2, '0');
 String fmtDate(DateTime d) => '${d.year}/${_two(d.month)}/${_two(d.day)}';
@@ -469,12 +471,12 @@ Future<XFile?> pickPhoto(BuildContext context) async {
       child: Wrap(children: [
         ListTile(
           leading: const Icon(Icons.photo_camera),
-          title: const Text('تصوير بالكاميرا'),
+          title: Text(tr('تصوير بالكاميرا')),
           onTap: () => Navigator.pop(ctx, ImageSource.camera),
         ),
         ListTile(
           leading: const Icon(Icons.photo_library),
-          title: const Text('اختيار من المعرض'),
+          title: Text(tr('اختيار من المعرض')),
           onTap: () => Navigator.pop(ctx, ImageSource.gallery),
         ),
       ]),
@@ -516,19 +518,19 @@ class _TextPromptState extends State<_TextPrompt> {
       content: TextField(
         controller: _c,
         autofocus: true,
-        decoration: deco('الاسم'),
+        decoration: deco(tr('الاسم')),
       ),
       actions: [
         TextButton(
           onPressed: () => Navigator.pop(context),
-          child: const Text('إلغاء'),
+          child: Text(tr('إلغاء')),
         ),
         FilledButton(
           onPressed: () {
             final t = _c.text.trim();
             Navigator.pop(context, t.isEmpty ? null : t);
           },
-          child: const Text('إضافة'),
+          child: Text(tr('إضافة')),
         ),
       ],
     );
@@ -561,14 +563,14 @@ Future<void> shareReport(BuildContext context, Report r) async {
     if (r.closedImagePath != null) files.add(XFile(r.closedImagePath!));
     await Share.shareXFiles(files, text: reportText(r));
   } catch (_) {
-    if (context.mounted) snack(context, 'تعذّرت المشاركة، جرّب تاني');
+    if (context.mounted) snack(context, tr('تعذّرت المشاركة، جرّب تاني'));
   }
 }
 
 Future<void> openInMaps(BuildContext context, Report r) async {
   final ok = await launchUrl(Uri.parse(mapsLink(r)),
       mode: LaunchMode.externalApplication);
-  if (!ok && context.mounted) snack(context, 'مقدرناش نفتح الخرائط');
+  if (!ok && context.mounted) snack(context, tr('مقدرناش نفتح الخرائط'));
 }
 
 // ─────────── تصدير CSV (بنفس أعمدة الشيت) ───────────
@@ -626,7 +628,7 @@ Future<File> buildCsv(List<Report> list) async {
 
 Future<void> exportCsv(BuildContext context, List<Report> list) async {
   if (list.isEmpty) {
-    snack(context, 'مفيش بلاغات للتصدير');
+    snack(context, tr('مفيش بلاغات للتصدير'));
     return;
   }
   final messenger = ScaffoldMessenger.of(context);
@@ -638,7 +640,7 @@ Future<void> exportCsv(BuildContext context, List<Report> list) async {
     );
   } catch (_) {
     messenger.showSnackBar(
-        const SnackBar(content: Text('تعذّر إنشاء الملف، جرّب تاني')));
+        SnackBar(content: Text(tr('تعذّر إنشاء الملف، جرّب تاني'))));
   }
 }
 
@@ -780,13 +782,13 @@ Future<File> buildPdf(List<Report> list, String title) async {
 Future<void> exportPdf(
     BuildContext context, List<Report> list, String title) async {
   if (list.isEmpty) {
-    snack(context, 'مفيش بلاغات للتصدير');
+    snack(context, tr('مفيش بلاغات للتصدير'));
     return;
   }
   final messenger = ScaffoldMessenger.of(context);
   messenger.hideCurrentSnackBar();
   messenger
-      .showSnackBar(const SnackBar(content: Text('جاري تجهيز ملف PDF...')));
+      .showSnackBar(SnackBar(content: Text(tr('جاري تجهيز ملف PDF...'))));
   try {
     final file = await buildPdf(list, title);
     messenger.hideCurrentSnackBar();
@@ -796,8 +798,8 @@ Future<void> exportPdf(
     );
   } catch (_) {
     messenger.hideCurrentSnackBar();
-    messenger.showSnackBar(const SnackBar(
-        content: Text('تعذّر إنشاء الـ PDF. تأكد من الإنترنت وجرّب تاني')));
+    messenger.showSnackBar(SnackBar(
+        content: Text(tr('تعذّر إنشاء الـ PDF. تأكد من الإنترنت وجرّب تاني'))));
   }
 }
 
@@ -1002,9 +1004,9 @@ class _PickerSheet extends StatelessWidget {
                   if (allowAdd)
                     ListTile(
                       leading: const Icon(Icons.add_circle_outline),
-                      title: const Text('إضافة خيار جديد'),
+                      title: Text(tr('إضافة خيار جديد')),
                       onTap: () async {
-                        final text = await askText(context, 'خيار جديد');
+                        final text = await askText(context, tr('خيار جديد'));
                         if (text == null) return;
                         final added = await OptionStore.add(kind, text);
                         if (added != null && context.mounted) {
@@ -1269,12 +1271,12 @@ class SyncService {
 
   static String _explain(int code, String what) {
     if (code == 401 || code == 403) {
-      return 'مفيش صلاحية في $what. راجع المفتاح وسكربت الإعداد';
+      return trf('مفيش صلاحية في {0}. راجع المفتاح وسكربت الإعداد', [what]);
     }
     if (code == 404) {
-      return 'مش لاقي الجدول أو مخزن الصور. شغّل سكربت الإعداد في Supabase';
+      return tr('مش لاقي الجدول أو مخزن الصور. شغّل سكربت الإعداد في Supabase');
     }
-    return 'فشل $what (كود $code)';
+    return trf('فشل {0} (كود {1})', [what, code]);
   }
 
   /// بيرجّع 'ok' لو الاتصال سليم، وغير كده رسالة الخطأ.
@@ -1286,23 +1288,23 @@ class SyncService {
           .timeout(_timeout);
       if (res.statusCode == 200) return 'ok';
       if (res.statusCode == 404) {
-        return 'الاتصال تمام لكن جدول reports مش موجود. شغّل سكربت الإعداد في Supabase';
+        return tr('الاتصال تمام لكن جدول reports مش موجود. شغّل سكربت الإعداد في Supabase');
       }
       if (res.statusCode == 401 || res.statusCode == 403) {
-        return 'المفتاح غلط أو مفيش صلاحية (${res.statusCode})';
+        return trf('المفتاح غلط أو مفيش صلاحية ({0})', [res.statusCode]);
       }
-      return 'فشل الاتصال (كود ${res.statusCode})';
+      return trf('فشل الاتصال (كود {0})', [res.statusCode]);
     } catch (_) {
-      return 'مقدرناش نوصل للسيرفر. راجع الرابط والإنترنت';
+      return tr('مقدرناش نوصل للسيرفر. راجع الرابط والإنترنت');
     }
   }
 
   static Future<SyncResult> sync() async {
-    if (running) throw SyncException('المزامنة شغالة بالفعل');
+    if (running) throw SyncException(tr('المزامنة شغالة بالفعل'));
     running = true;
     try {
       if (!await Session.ensureFresh()) {
-        throw SyncException('انتهت الجلسة، سجّل الدخول من جديد');
+        throw SyncException(tr('انتهت الجلسة، سجّل الدخول من جديد'));
       }
       var pushed = 0;
       var pulled = 0;
@@ -1344,7 +1346,7 @@ class SyncService {
     } on SyncException {
       rethrow;
     } catch (_) {
-      throw SyncException('مفيش اتصال بالإنترنت أو السيرفر مش بيرد');
+      throw SyncException(tr('مفيش اتصال بالإنترنت أو السيرفر مش بيرد'));
     } finally {
       running = false;
     }
@@ -1362,7 +1364,7 @@ class SyncService {
     if (res.statusCode >= 200 && res.statusCode < 300) {
       return '$_base/storage/v1/object/public/report-photos/$name';
     }
-    throw SyncException(_explain(res.statusCode, 'رفع الصورة'));
+    throw SyncException(_explain(res.statusCode, tr('رفع الصورة')));
   }
 
   static Future<void> _push(Report r) async {
@@ -1402,7 +1404,7 @@ class SyncService {
         // البلاغ موجود أصلاً على السيرفر (محاولة سابقة اتقطعت): نحدّثه.
         r.remote = true;
       } else {
-        throw SyncException(_explain(res.statusCode, 'إرسال البلاغ'));
+        throw SyncException(_explain(res.statusCode, tr('إرسال البلاغ')));
       }
     }
 
@@ -1420,7 +1422,7 @@ class SyncService {
       r.dirty = false;
       return;
     }
-    throw SyncException(_explain(res.statusCode, 'تحديث البلاغ'));
+    throw SyncException(_explain(res.statusCode, tr('تحديث البلاغ')));
   }
 
   static Future<List<Map<String, dynamic>>> _fetchRows() async {
@@ -1431,7 +1433,7 @@ class SyncService {
         )
         .timeout(_timeout);
     if (res.statusCode != 200) {
-      throw SyncException(_explain(res.statusCode, 'تحميل البلاغات'));
+      throw SyncException(_explain(res.statusCode, tr('تحميل البلاغات')));
     }
     return (jsonDecode(utf8.decode(res.bodyBytes)) as List)
         .map((e) => e as Map<String, dynamic>)
@@ -1648,12 +1650,12 @@ class _AppShellState extends State<AppShell> {
       final r = await SyncService.sync();
       s.setLastSync(DateTime.now());
       msg = (r.pushed == 0 && r.pulled == 0)
-          ? 'كل حاجة محدّثة ✅'
-          : 'تمت المزامنة ✅  أُرسل ${r.pushed} • وصل ${r.pulled}';
+          ? tr('كل حاجة محدّثة ✅')
+          : trf('تمت المزامنة ✅  أُرسل {0} • وصل {1}', [r.pushed, r.pulled]);
     } on SyncException catch (e) {
-      msg = 'فشلت المزامنة: ${e.message}';
+      msg = trf('فشلت المزامنة: {0}', [e.message]);
     } catch (_) {
-      msg = 'فشلت المزامنة، راجع الإنترنت';
+      msg = tr('فشلت المزامنة، راجع الإنترنت');
     }
     if (!mounted) return;
     setState(() => _syncing = false);
@@ -1684,7 +1686,7 @@ class _AppShellState extends State<AppShell> {
   }
 
   Future<void> _export(String kind) async {
-    const title = 'سجل المخالفات البيئية';
+    final title = tr('سجل المخالفات البيئية');
     if (kind == 'pdf') {
       await exportPdf(context, _filtered, title);
     } else {
@@ -1725,27 +1727,27 @@ class _AppShellState extends State<AppShell> {
           ? FloatingActionButton.extended(
               onPressed: _openNew,
               icon: const Icon(Icons.add_a_photo),
-              label: const Text('تسجيل مخالفة'),
+              label: Text(tr('تسجيل مخالفة')),
             )
           : null,
       bottomNavigationBar: NavigationBar(
         selectedIndex: _tab,
         onDestinationSelected: (i) => setState(() => _tab = i),
-        destinations: const [
+        destinations: [
           NavigationDestination(
             icon: Icon(Icons.list_alt_outlined),
             selectedIcon: Icon(Icons.list_alt),
-            label: 'السجل',
+            label: tr('السجل'),
           ),
           NavigationDestination(
             icon: Icon(Icons.map_outlined),
             selectedIcon: Icon(Icons.map),
-            label: 'الخريطة',
+            label: tr('الخريطة'),
           ),
           NavigationDestination(
             icon: Icon(Icons.settings_outlined),
             selectedIcon: Icon(Icons.settings),
-            label: 'الإعدادات',
+            label: tr('الإعدادات'),
           ),
         ],
       ),
@@ -1775,22 +1777,22 @@ class _FilterSheetState extends State<_FilterSheet> {
           mainAxisSize: MainAxisSize.min,
           children: [
             PickerField(
-              label: 'نوع المخالفة',
+              label: tr('نوع المخالفة'),
               icon: Icons.category_outlined,
               kind: 'type',
               value: _type,
               allowAdd: false,
-              clearLabel: 'الكل',
+              clearLabel: tr('الكل'),
               onChanged: (v) => setState(() => _type = v),
             ),
             const SizedBox(height: 12),
             PickerField(
-              label: 'المكان',
+              label: tr('المكان'),
               icon: Icons.place_outlined,
               kind: 'location',
               value: _location,
               allowAdd: false,
-              clearLabel: 'الكل',
+              clearLabel: tr('الكل'),
               onChanged: (v) => setState(() => _location = v),
             ),
             const SizedBox(height: 16),
@@ -1800,7 +1802,7 @@ class _FilterSheetState extends State<_FilterSheet> {
                   child: OutlinedButton(
                     onPressed: () =>
                         Navigator.pop(context, const FilterResult(null, null)),
-                    child: const Text('مسح الفلتر'),
+                    child: Text(tr('مسح الفلتر')),
                   ),
                 ),
                 const SizedBox(width: 12),
@@ -1808,7 +1810,7 @@ class _FilterSheetState extends State<_FilterSheet> {
                   child: FilledButton(
                     onPressed: () =>
                         Navigator.pop(context, FilterResult(_type, _location)),
-                    child: const Text('تطبيق'),
+                    child: Text(tr('تطبيق')),
                   ),
                 ),
               ],
@@ -1883,9 +1885,9 @@ class ReportsTab extends StatelessWidget {
                 children: [
                   const Icon(Icons.eco, color: Colors.white, size: 30),
                   const SizedBox(width: 8),
-                  const Expanded(
+                  Expanded(
                     child: Text(
-                      'سجل المخالفات البيئية',
+                      tr('سجل المخالفات البيئية'),
                       style: TextStyle(
                         color: Colors.white,
                         fontSize: 20,
@@ -1905,20 +1907,20 @@ class ReportsTab extends StatelessWidget {
                             ),
                           )
                         : IconButton(
-                            tooltip: 'مزامنة مع السيرفر',
+                            tooltip: tr('مزامنة مع السيرفر'),
                             onPressed: onSync,
                             icon: const Icon(Icons.cloud_sync,
                                 color: Colors.white),
                           ),
                   PopupMenuButton<String>(
-                    tooltip: 'تصدير',
+                    tooltip: tr('تصدير'),
                     icon: const Icon(Icons.ios_share, color: Colors.white),
                     onSelected: onExport,
-                    itemBuilder: (_) => const [
+                    itemBuilder: (_) => [
                       PopupMenuItem(
-                          value: 'pdf', child: Text('تصدير PDF (بالصور)')),
+                          value: 'pdf', child: Text(tr('تصدير PDF (بالصور)'))),
                       PopupMenuItem(
-                          value: 'csv', child: Text('تصدير Excel / CSV')),
+                          value: 'csv', child: Text(tr('تصدير Excel / CSV'))),
                     ],
                   ),
                 ],
@@ -1926,10 +1928,10 @@ class ReportsTab extends StatelessWidget {
               const SizedBox(height: 14),
               Row(
                 children: [
-                  _Stat('الإجمالي', all.length),
-                  _Stat('مفتوح', open),
-                  _Stat('جاري', prog),
-                  _Stat('مغلق', closed),
+                  _Stat(tr('الإجمالي'), all.length),
+                  _Stat(tr('مفتوح'), open),
+                  _Stat(tr('جاري'), prog),
+                  _Stat(tr('مغلق'), closed),
                 ],
               ),
             ],
@@ -1948,7 +1950,7 @@ class ReportsTab extends StatelessWidget {
                     Padding(
                       padding: const EdgeInsets.symmetric(horizontal: 4),
                       child: ChoiceChip(
-                        label: const Text('الكل'),
+                        label: Text(tr('الكل')),
                         selected: status == null,
                         onSelected: (_) => onStatus(null),
                       ),
@@ -1967,7 +1969,7 @@ class ReportsTab extends StatelessWidget {
                 ),
               ),
               IconButton(
-                tooltip: 'فلترة',
+                tooltip: tr('فلترة'),
                 onPressed: onFilter,
                 icon: Icon(
                   hasExtraFilter ? Icons.filter_alt : Icons.filter_alt_outlined,
@@ -1985,8 +1987,8 @@ class ReportsTab extends StatelessWidget {
                     padding: const EdgeInsets.all(32),
                     child: Text(
                       all.isEmpty
-                          ? 'مفيش بلاغات لسه.\nاضغط "تسجيل مخالفة" وصوّر أي مخلفات في الموقع.'
-                          : 'مفيش بلاغات بالفلتر ده.',
+                          ? tr('مفيش بلاغات لسه.\nاضغط "تسجيل مخالفة" وصوّر أي مخلفات في الموقع.')
+                          : tr('مفيش بلاغات بالفلتر ده.'),
                       textAlign: TextAlign.center,
                       style: const TextStyle(fontSize: 16),
                     ),
@@ -2099,7 +2101,7 @@ class _ReportCard extends StatelessWidget {
                       ),
                       const SizedBox(height: 3),
                       Text(
-                        r.description.isEmpty ? 'بدون وصف' : r.description,
+                        r.description.isEmpty ? tr('بدون وصف') : r.description,
                         maxLines: 2,
                         overflow: TextOverflow.ellipsis,
                         style: const TextStyle(fontSize: 13),
@@ -2114,7 +2116,7 @@ class _ReportCard extends StatelessWidget {
                           _Badge(OptionStore.ar('type', r.type),
                               const Color(0xFF455A64)),
                           if (overdue)
-                            const _Badge('متأخر', Color(0xFFB71C1C),
+                            _Badge(tr('متأخر'), Color(0xFFB71C1C),
                                 icon: Icons.schedule),
                         ],
                       ),
@@ -2219,13 +2221,13 @@ class _LargeCard extends StatelessWidget {
                       _Badge(OptionStore.ar('type', r.type),
                           const Color(0xFF455A64)),
                       if (overdue)
-                        const _Badge('متأخر', Color(0xFFB71C1C),
+                        _Badge(tr('متأخر'), Color(0xFFB71C1C),
                             icon: Icons.schedule),
                     ],
                   ),
                   const SizedBox(height: 8),
                   Text(
-                    r.description.isEmpty ? 'بدون وصف' : r.description,
+                    r.description.isEmpty ? tr('بدون وصف') : r.description,
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
                   ),
@@ -2313,7 +2315,7 @@ class _SettingsTabState extends State<SettingsTab> {
     if (_url.text.trim().isEmpty || _key.text.trim().isEmpty) {
       setState(() {
         _testOk = false;
-        _testMsg = 'اكتب رابط السيرفر والمفتاح الأول';
+        _testMsg = tr('اكتب رابط السيرفر والمفتاح الأول');
       });
       return;
     }
@@ -2326,13 +2328,13 @@ class _SettingsTabState extends State<SettingsTab> {
     setState(() {
       _testing = false;
       _testOk = msg == 'ok';
-      _testMsg = msg == 'ok' ? 'تم الاتصال بالسيرفر بنجاح ✅' : msg;
+      _testMsg = msg == 'ok' ? tr('تم الاتصال بالسيرفر بنجاح ✅') : msg;
     });
   }
 
   Future<void> _copySql() async {
     await Clipboard.setData(const ClipboardData(text: kSetupSql));
-    if (mounted) snack(context, 'تم نسخ السكربت. الزقه في Supabase ثم Run');
+    if (mounted) snack(context, tr('تم نسخ السكربت. الزقه في Supabase ثم Run'));
   }
 
   Widget _section(String title, IconData icon, List<Widget> children) {
@@ -2378,8 +2380,8 @@ class _SettingsTabState extends State<SettingsTab> {
     final cs = Theme.of(context).colorScheme;
     final last = s.lastSync;
     final lastText = last == null
-        ? 'لسه ماتمتش مزامنة'
-        : 'آخر مزامنة: ${fmtDate(last)}  ${_two(last.hour)}:${_two(last.minute)}';
+        ? tr('لسه ماتمتش مزامنة')
+        : trf('آخر مزامنة: {0}  {1}:{2}', [fmtDate(last), _two(last.hour), _two(last.minute)]);
 
     return Scaffold(
       appBar: AppBar(title: Text(tr('الإعدادات'))),
@@ -2398,8 +2400,8 @@ class _SettingsTabState extends State<SettingsTab> {
               const SizedBox(height: 4),
               Text(
                 Session.instance.isAdmin
-                    ? 'مدير عام • ${Session.instance.username}'
-                    : 'مبلّغ • ${FactoryStore.instance.nameOf(Session.instance.factoryId)}',
+                    ? trf('مدير عام • {0}', [Session.instance.username])
+                    : trf('مبلّغ • {0}', [FactoryStore.instance.nameOf(Session.instance.factoryId)]),
                 style: const TextStyle(color: Colors.grey),
               ),
               const SizedBox(height: 12),
@@ -2464,7 +2466,7 @@ class _SettingsTabState extends State<SettingsTab> {
               children: [
                 for (var i = 0; i < AppSettings.seeds.length; i++)
                   Tooltip(
-                    message: AppSettings.seedNames[i],
+                    message: tr(AppSettings.seedNames[i]),
                     child: GestureDetector(
                       onTap: () => s.setSeed(i),
                       child: Container(
@@ -2488,43 +2490,43 @@ class _SettingsTabState extends State<SettingsTab> {
                   ),
               ],
             ),
-            _label('شكل قايمة البلاغات'),
+            _label(tr('شكل قايمة البلاغات')),
             Wrap(
               spacing: 8,
               children: [
-                _chip('مضغوطة', s.cardStyle == 0, () => s.setCardStyle(0),
+                _chip(tr('مضغوطة'), s.cardStyle == 0, () => s.setCardStyle(0),
                     icon: Icons.view_list),
-                _chip('بطاقات كبيرة', s.cardStyle == 1,
+                _chip(tr('بطاقات كبيرة'), s.cardStyle == 1,
                     () => s.setCardStyle(1),
                     icon: Icons.view_agenda),
               ],
             ),
-            _label('حجم الخط'),
+            _label(tr('حجم الخط')),
             Wrap(
               spacing: 8,
               children: [
-                _chip('صغير', s.textSize == 0, () => s.setTextSize(0)),
-                _chip('عادي', s.textSize == 1, () => s.setTextSize(1)),
-                _chip('كبير', s.textSize == 2, () => s.setTextSize(2)),
-                _chip('كبير جداً', s.textSize == 3, () => s.setTextSize(3)),
+                _chip(tr('صغير'), s.textSize == 0, () => s.setTextSize(0)),
+                _chip(tr('عادي'), s.textSize == 1, () => s.setTextSize(1)),
+                _chip(tr('كبير'), s.textSize == 2, () => s.setTextSize(2)),
+                _chip(tr('كبير جداً'), s.textSize == 3, () => s.setTextSize(3)),
               ],
             ),
           ]),
-          _section('بياناتي', Icons.person_outline, [
+          _section(tr('بياناتي'), Icons.person_outline, [
             TextField(
               controller: _name,
-              decoration: deco('اسمي (بيتكتب تلقائي في البلاغات)',
+              decoration: deco(tr('اسمي (بيتكتب تلقائي في البلاغات)'),
                   icon: Icons.badge_outlined),
               onChanged: s.setReporterName,
             ),
           ]),
           if (!Session.instance.loggedIn || Session.instance.isAdmin)
-          _section('السيرفر والمزامنة', Icons.cloud_outlined, [
+          _section(tr('السيرفر والمزامنة'), Icons.cloud_outlined, [
             SwitchListTile(
               contentPadding: EdgeInsets.zero,
-              title: const Text('تفعيل المزامنة مع السيرفر'),
-              subtitle: const Text(
-                  'البلاغات بتتبعت للسيرفر وتشوف بلاغات باقي المستخدمين'),
+              title: Text(tr('تفعيل المزامنة مع السيرفر')),
+              subtitle: Text(
+                  tr('البلاغات بتتبعت للسيرفر وتشوف بلاغات باقي المستخدمين')),
               value: s.syncEnabled,
               onChanged: s.setSyncEnabled,
             ),
@@ -2533,7 +2535,7 @@ class _SettingsTabState extends State<SettingsTab> {
               controller: _url,
               keyboardType: TextInputType.url,
               textDirection: TextDirection.ltr,
-              decoration: deco('رابط السيرفر (Project URL)',
+              decoration: deco(tr('رابط السيرفر (Project URL)'),
                   hint: 'https://xxxx.supabase.co', icon: Icons.link),
               onChanged: s.setServerUrl,
             ),
@@ -2541,7 +2543,7 @@ class _SettingsTabState extends State<SettingsTab> {
             TextField(
               controller: _key,
               textDirection: TextDirection.ltr,
-              decoration: deco('المفتاح (anon / publishable key)',
+              decoration: deco(tr('المفتاح (anon / publishable key)'),
                   icon: Icons.key),
               onChanged: s.setServerKey,
             ),
@@ -2557,7 +2559,7 @@ class _SettingsTabState extends State<SettingsTab> {
                             height: 16,
                             child: CircularProgressIndicator(strokeWidth: 2))
                         : const Icon(Icons.wifi_tethering),
-                    label: const Text('اختبار الاتصال'),
+                    label: Text(tr('اختبار الاتصال')),
                   ),
                 ),
                 const SizedBox(width: 10),
@@ -2566,7 +2568,7 @@ class _SettingsTabState extends State<SettingsTab> {
                     onPressed:
                         (s.syncActive && !widget.syncing) ? widget.onSyncNow : null,
                     icon: const Icon(Icons.cloud_sync),
-                    label: const Text('مزامنة الآن'),
+                    label: Text(tr('مزامنة الآن')),
                   ),
                 ),
               ],
@@ -2589,18 +2591,18 @@ class _SettingsTabState extends State<SettingsTab> {
             OutlinedButton.icon(
               onPressed: _copySql,
               icon: const Icon(Icons.copy),
-              label: const Text('نسخ سكربت إعداد قاعدة البيانات'),
+              label: Text(tr('نسخ سكربت إعداد قاعدة البيانات')),
             ),
             const SizedBox(height: 8),
-            const Text(
-              'ملاحظة: البلاغ اللي اتبعت للسيرفر مبيتمسحش (سجل رسمي)، بس بيتقفل من "تحديث الحالة". رقم البلاغ بيتحدد من السيرفر.',
+            Text(
+              tr('ملاحظة: البلاغ اللي اتبعت للسيرفر مبيتمسحش (سجل رسمي)، بس بيتقفل من "تحديث الحالة". رقم البلاغ بيتحدد من السيرفر.'),
               style: TextStyle(color: Colors.grey, fontSize: 12),
             ),
           ]),
-          _section('عن التطبيق', Icons.info_outline, const [
-            Text('رصد المخلفات البيئية'),
+          _section(tr('عن التطبيق'), Icons.info_outline, [
+            Text(tr('رصد المخلفات البيئية')),
             SizedBox(height: 4),
-            Text('الإصدار 2.0.0',
+            Text(tr('الإصدار 2.0.0'),
                 style: TextStyle(color: Colors.grey, fontSize: 12)),
           ]),
           const SizedBox(height: 20),
@@ -2657,7 +2659,7 @@ class MapTab extends StatelessWidget {
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      r.description.isEmpty ? 'بدون وصف' : r.description,
+                      r.description.isEmpty ? tr('بدون وصف') : r.description,
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
                     ),
@@ -2670,7 +2672,7 @@ class MapTab extends StatelessWidget {
                   Navigator.pop(context);
                   onOpen(r);
                 },
-                child: const Text('التفاصيل'),
+                child: Text(tr('التفاصيل')),
               ),
             ],
           ),
@@ -2683,11 +2685,11 @@ class MapTab extends StatelessWidget {
   Widget build(BuildContext context) {
     final located = reports.where((r) => r.hasLocation).toList();
     if (located.isEmpty) {
-      return const Center(
+      return Center(
         child: Padding(
           padding: EdgeInsets.all(32),
           child: Text(
-            'مفيش بلاغات عليها موقع لسه.\nلما تسجّل بلاغ والـ GPS شغال هيظهر هنا على الخريطة.',
+            tr('مفيش بلاغات عليها موقع لسه.\nلما تسجّل بلاغ والـ GPS شغال هيظهر هنا على الخريطة.'),
             textAlign: TextAlign.center,
             style: TextStyle(fontSize: 16),
           ),
@@ -2755,7 +2757,7 @@ class MapTab extends StatelessWidget {
               ],
             ),
             child: Text(
-              'خريطة البلاغات (${located.length})  🔴 مفتوح  🟠 جاري  🟢 مغلق',
+              trf('خريطة البلاغات ({0})  🔴 مفتوح  🟠 جاري  🟢 مغلق', [located.length]),
               style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
             ),
           ),
@@ -2821,7 +2823,7 @@ class _NewReportScreenState extends State<NewReportScreen> {
     });
     try {
       if (!await Geolocator.isLocationServiceEnabled()) {
-        throw 'شغّل الـ GPS من إعدادات الموبايل';
+        throw tr('شغّل الـ GPS من إعدادات الموبايل');
       }
       var perm = await Geolocator.checkPermission();
       if (perm == LocationPermission.denied) {
@@ -2829,7 +2831,7 @@ class _NewReportScreenState extends State<NewReportScreen> {
       }
       if (perm == LocationPermission.denied ||
           perm == LocationPermission.deniedForever) {
-        throw 'مفيش صلاحية للوصول للموقع';
+        throw tr('مفيش صلاحية للوصول للموقع');
       }
       final pos = await Geolocator.getCurrentPosition(
         locationSettings:
@@ -2839,7 +2841,7 @@ class _NewReportScreenState extends State<NewReportScreen> {
     } catch (e) {
       if (mounted) {
         setState(() => _locationError =
-            e is String ? e : 'مقدرناش نحدد الموقع، جرّب تاني');
+            e is String ? e : tr('مقدرناش نحدد الموقع، جرّب تاني'));
       }
     } finally {
       if (mounted) setState(() => _locating = false);
@@ -2875,15 +2877,15 @@ class _NewReportScreenState extends State<NewReportScreen> {
 
   Future<void> _save() async {
     if (_photo == null) {
-      snack(context, 'لازم تضيف صورة للمخالفة');
+      snack(context, tr('لازم تضيف صورة للمخالفة'));
       return;
     }
     if (_location == null) {
-      snack(context, 'اختار المكان');
+      snack(context, tr('اختار المكان'));
       return;
     }
     if (_type == null) {
-      snack(context, 'اختار نوع المخالفة');
+      snack(context, tr('اختار نوع المخالفة'));
       return;
     }
     setState(() => _saving = true);
@@ -2919,14 +2921,14 @@ class _NewReportScreenState extends State<NewReportScreen> {
       messenger.showSnackBar(
         SnackBar(
           content: Text(saved.no == 0
-              ? 'تم تسجيل البلاغ ✅'
-              : 'تم تسجيل البلاغ رقم ${saved.no} ✅'),
+              ? tr('تم تسجيل البلاغ ✅')
+              : trf('تم تسجيل البلاغ رقم {0} ✅', [saved.no])),
         ),
       );
     } catch (_) {
       if (mounted) {
         setState(() => _saving = false);
-        snack(context, 'حصل خطأ أثناء الحفظ، جرّب تاني');
+        snack(context, tr('حصل خطأ أثناء الحفظ، جرّب تاني'));
       }
     }
   }
@@ -2934,7 +2936,7 @@ class _NewReportScreenState extends State<NewReportScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('بلاغ جديد')),
+      appBar: AppBar(title: Text(tr('بلاغ جديد'))),
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
@@ -2951,12 +2953,12 @@ class _NewReportScreenState extends State<NewReportScreen> {
               ),
               clipBehavior: Clip.antiAlias,
               child: _photo == null
-                  ? const Column(
+                  ? Column(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
                         Icon(Icons.add_a_photo, size: 48, color: Colors.green),
                         SizedBox(height: 8),
-                        Text('اضغط لإضافة صورة المخالفة *'),
+                        Text(tr('اضغط لإضافة صورة المخالفة *')),
                       ],
                     )
                   : Image.file(File(_photo!.path),
@@ -2965,7 +2967,7 @@ class _NewReportScreenState extends State<NewReportScreen> {
           ),
           const SizedBox(height: 16),
           FieldBox(
-            label: 'تاريخ الرصد',
+            label: tr('تاريخ الرصد'),
             icon: Icons.event,
             text: fmtDate(_date),
             onTap: _pickDate,
@@ -2973,7 +2975,7 @@ class _NewReportScreenState extends State<NewReportScreen> {
           ),
           const SizedBox(height: 12),
           PickerField(
-            label: 'المكان *',
+            label: tr('المكان *'),
             icon: Icons.place,
             kind: 'location',
             value: _location,
@@ -2981,7 +2983,7 @@ class _NewReportScreenState extends State<NewReportScreen> {
           ),
           const SizedBox(height: 12),
           PickerField(
-            label: 'نوع المخالفة *',
+            label: tr('نوع المخالفة *'),
             icon: Icons.category,
             kind: 'type',
             value: _type,
@@ -2992,22 +2994,22 @@ class _NewReportScreenState extends State<NewReportScreen> {
             controller: _descCtrl,
             maxLines: 3,
             decoration: deco(
-              'الوصف',
-              hint: 'مثال: وجود فلاتر أكياس خارج مخزن المخلفات الخطرة',
+              tr('الوصف'),
+              hint: tr('مثال: وجود فلاتر أكياس خارج مخزن المخلفات الخطرة'),
               icon: Icons.notes,
             ),
           ),
           const SizedBox(height: 12),
           PickerField(
-            label: 'الجهة المسؤولة',
+            label: tr('الجهة المسؤولة'),
             icon: Icons.engineering,
             kind: 'resp',
             value: _resp,
-            clearLabel: 'بدون تحديد',
+            clearLabel: tr('بدون تحديد'),
             onChanged: (v) => setState(() => _resp = v),
           ),
           const SizedBox(height: 14),
-          const Text('درجة الخطورة',
+          Text(tr('درجة الخطورة'),
               style: TextStyle(fontWeight: FontWeight.bold)),
           const SizedBox(height: 6),
           Wrap(
@@ -3037,10 +3039,10 @@ class _NewReportScreenState extends State<NewReportScreen> {
                       color: _position != null ? Colors.green : Colors.red,
                     ),
               title: Text(_locating
-                  ? 'بنحدد موقعك...'
+                  ? tr('بنحدد موقعك...')
                   : _position != null
-                      ? 'تم تحديد الموقع (GPS)'
-                      : (_locationError ?? 'الموقع غير محدد')),
+                      ? tr('تم تحديد الموقع (GPS)')
+                      : (_locationError ?? tr('الموقع غير محدد'))),
               subtitle: _position != null
                   ? Text(
                       '${_position!.latitude.toStringAsFixed(5)}, ${_position!.longitude.toStringAsFixed(5)}')
@@ -3054,12 +3056,12 @@ class _NewReportScreenState extends State<NewReportScreen> {
           Card(
             child: ExpansionTile(
               leading: const Icon(Icons.tune),
-              title: const Text('تفاصيل إضافية (اختياري)'),
+              title: Text(tr('تفاصيل إضافية (اختياري)')),
               childrenPadding: const EdgeInsets.fromLTRB(14, 0, 14, 14),
               children: [
-                const Align(
+                Align(
                   alignment: AlignmentDirectional.centerStart,
-                  child: Text('التأثير البيئي',
+                  child: Text(tr('التأثير البيئي'),
                       style: TextStyle(fontWeight: FontWeight.bold)),
                 ),
                 const SizedBox(height: 6),
@@ -3086,18 +3088,18 @@ class _NewReportScreenState extends State<NewReportScreen> {
                 const SizedBox(height: 12),
                 TextField(
                   controller: _reporterCtrl,
-                  decoration: deco('اسم المبلّغ', icon: Icons.person),
+                  decoration: deco(tr('اسم المبلّغ'), icon: Icons.person),
                 ),
                 const SizedBox(height: 12),
                 TextField(
                   controller: _actionCtrl,
                   maxLines: 2,
-                  decoration: deco('الإجراء التصحيحي المقترح',
+                  decoration: deco(tr('الإجراء التصحيحي المقترح'),
                       icon: Icons.build_circle_outlined),
                 ),
                 const SizedBox(height: 12),
                 FieldBox(
-                  label: 'تاريخ الاستحقاق للمعالجة',
+                  label: tr('تاريخ الاستحقاق للمعالجة'),
                   icon: Icons.alarm,
                   text: _due == null ? null : fmtDate(_due!),
                   onTap: _pickDue,
@@ -3120,7 +3122,7 @@ class _NewReportScreenState extends State<NewReportScreen> {
                     height: 18,
                     child: CircularProgressIndicator(strokeWidth: 2))
                 : const Icon(Icons.check),
-            label: const Text('تسجيل البلاغ'),
+            label: Text(tr('تسجيل البلاغ')),
             style:
                 FilledButton.styleFrom(minimumSize: const Size.fromHeight(52)),
           ),
@@ -3147,15 +3149,15 @@ class _DetailScreenState extends State<DetailScreen> {
     final ok = await showDialog<bool>(
       context: context,
       builder: (_) => AlertDialog(
-        title: const Text('حذف البلاغ؟'),
-        content: const Text('البلاغ هيتمسح نهائي من الموبايل.'),
+        title: Text(tr('حذف البلاغ؟')),
+        content: Text(tr('البلاغ هيتمسح نهائي من الموبايل.')),
         actions: [
           TextButton(
               onPressed: () => Navigator.pop(context, false),
-              child: const Text('إلغاء')),
+              child: Text(tr('إلغاء'))),
           TextButton(
               onPressed: () => Navigator.pop(context, true),
-              child: const Text('حذف')),
+              child: Text(tr('حذف'))),
         ],
       ),
     );
@@ -3195,12 +3197,12 @@ class _DetailScreenState extends State<DetailScreen> {
     final overdue = isOverdue(r);
     return Scaffold(
       appBar: AppBar(
-        title: Text('بلاغ ${noText(r)}'),
+        title: Text(trf('بلاغ {0}', [noText(r)])),
         actions: [
           // البلاغ اللي اتبعت للسيرفر مبيتمسحش (سجل رسمي)، بس بيتقفل.
           if (!r.remote)
             IconButton(
-              tooltip: 'حذف',
+              tooltip: tr('حذف'),
               icon: const Icon(Icons.delete_outline),
               onPressed: _confirmDelete,
             ),
@@ -3216,7 +3218,7 @@ class _DetailScreenState extends State<DetailScreen> {
           ),
           if (r.closedImagePath != null) ...[
             const SizedBox(height: 10),
-            const Text('بعد المعالجة',
+            Text(tr('بعد المعالجة'),
                 style: TextStyle(fontWeight: FontWeight.bold)),
             const SizedBox(height: 6),
             ClipRRect(
@@ -3232,10 +3234,10 @@ class _DetailScreenState extends State<DetailScreen> {
             children: [
               _Badge(arOf(kStatuses, r.status), statusColor(r.status)),
               _Badge(OptionStore.ar('type', r.type), const Color(0xFF455A64)),
-              _Badge('خطورة ${arOf(kSeverities, r.severity)}',
+              _Badge(trf('خطورة {0}', [arOf(kSeverities, r.severity)]),
                   severityColor(r.severity)),
               if (overdue)
-                const _Badge('متأخر', Color(0xFFB71C1C), icon: Icons.schedule),
+                _Badge(tr('متأخر'), Color(0xFFB71C1C), icon: Icons.schedule),
             ],
           ),
           const SizedBox(height: 8),
@@ -3244,31 +3246,31 @@ class _DetailScreenState extends State<DetailScreen> {
               padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
               child: Column(
                 children: [
-                  _info(Icons.place, 'المكان',
+                  _info(Icons.place, tr('المكان'),
                       OptionStore.ar('location', r.location)),
-                  _info(Icons.event, 'تاريخ الرصد', fmtDate(r.createdAt)),
-                  _info(Icons.notes, 'الوصف', r.description),
+                  _info(Icons.event, tr('تاريخ الرصد'), fmtDate(r.createdAt)),
+                  _info(Icons.notes, tr('الوصف'), r.description),
                   _info(
                       Icons.engineering,
-                      'الجهة المسؤولة',
+                      tr('الجهة المسؤولة'),
                       r.responsibility.isEmpty
                           ? ''
                           : OptionStore.ar('resp', r.responsibility)),
-                  _info(Icons.public, 'التأثير البيئي',
+                  _info(Icons.public, tr('التأثير البيئي'),
                       r.impacts.map((e) => arOf(kImpacts, e)).join(' - ')),
-                  _info(Icons.person, 'المبلّغ', r.reporter),
-                  _info(Icons.build_circle_outlined, 'الإجراء التصحيحي',
+                  _info(Icons.person, tr('المبلّغ'), r.reporter),
+                  _info(Icons.build_circle_outlined, tr('الإجراء التصحيحي'),
                       r.correctiveAction),
-                  _info(Icons.alarm, 'تاريخ الاستحقاق',
+                  _info(Icons.alarm, tr('تاريخ الاستحقاق'),
                       r.dueDate == null ? '' : fmtDate(r.dueDate!)),
-                  _info(Icons.verified, 'تاريخ الإغلاق',
+                  _info(Icons.verified, tr('تاريخ الإغلاق'),
                       r.closedAt == null ? '' : fmtDate(r.closedAt!)),
                   _info(
                       Icons.my_location,
-                      'الإحداثيات',
+                      tr('الإحداثيات'),
                       r.hasLocation
                           ? '${r.lat!.toStringAsFixed(5)}, ${r.lng!.toStringAsFixed(5)}'
-                          : 'غير مسجّلة'),
+                          : tr('غير مسجّلة')),
                 ],
               ),
             ),
@@ -3319,7 +3321,7 @@ class _DetailScreenState extends State<DetailScreen> {
           FilledButton.icon(
             onPressed: _update,
             icon: const Icon(Icons.published_with_changes),
-            label: const Text('تحديث الحالة / الإغلاق'),
+            label: Text(tr('تحديث الحالة / الإغلاق')),
             style:
                 FilledButton.styleFrom(minimumSize: const Size.fromHeight(50)),
           ),
@@ -3327,7 +3329,7 @@ class _DetailScreenState extends State<DetailScreen> {
           OutlinedButton.icon(
             onPressed: () => shareReport(context, r),
             icon: const Icon(Icons.share),
-            label: const Text('مشاركة (واتساب / إيميل)'),
+            label: Text(tr('مشاركة (واتساب / إيميل)')),
             style: OutlinedButton.styleFrom(
                 minimumSize: const Size.fromHeight(48)),
           ),
@@ -3337,9 +3339,9 @@ class _DetailScreenState extends State<DetailScreen> {
               Expanded(
                 child: OutlinedButton.icon(
                   onPressed: () =>
-                      exportPdf(context, [r], 'بلاغ مخالفة بيئية'),
+                      exportPdf(context, [r], tr('بلاغ مخالفة بيئية')),
                   icon: const Icon(Icons.picture_as_pdf),
-                  label: const Text('ملف PDF'),
+                  label: Text(tr('ملف PDF')),
                 ),
               ),
               if (r.hasLocation) ...[
@@ -3348,7 +3350,7 @@ class _DetailScreenState extends State<DetailScreen> {
                   child: OutlinedButton.icon(
                     onPressed: () => openInMaps(context, r),
                     icon: const Icon(Icons.map),
-                    label: const Text('فتح في الخرائط'),
+                    label: Text(tr('فتح في الخرائط')),
                   ),
                 ),
               ],
@@ -3429,7 +3431,7 @@ class _UpdateSheetState extends State<UpdateSheet> {
     } catch (_) {
       if (mounted) {
         setState(() => _saving = false);
-        snack(context, 'حصل خطأ أثناء الحفظ، جرّب تاني');
+        snack(context, tr('حصل خطأ أثناء الحفظ، جرّب تاني'));
       }
     }
   }
@@ -3446,7 +3448,7 @@ class _UpdateSheetState extends State<UpdateSheet> {
             crossAxisAlignment: CrossAxisAlignment.start,
             mainAxisSize: MainAxisSize.min,
             children: [
-              Text('تحديث حالة البلاغ',
+              Text(tr('تحديث حالة البلاغ'),
                   style: Theme.of(context).textTheme.titleMedium),
               const SizedBox(height: 10),
               Wrap(
@@ -3465,12 +3467,12 @@ class _UpdateSheetState extends State<UpdateSheet> {
               TextField(
                 controller: _action,
                 maxLines: 3,
-                decoration: deco('الإجراء التصحيحي اللي اتعمل',
+                decoration: deco(tr('الإجراء التصحيحي اللي اتعمل'),
                     icon: Icons.build_circle_outlined),
               ),
               const SizedBox(height: 12),
               FieldBox(
-                label: 'تاريخ الاستحقاق',
+                label: tr('تاريخ الاستحقاق'),
                 icon: Icons.alarm,
                 text: _due == null ? null : fmtDate(_due!),
                 onTap: _pickDue,
@@ -3508,15 +3510,15 @@ class _UpdateSheetState extends State<UpdateSheet> {
                   icon: const Icon(Icons.add_a_photo),
                   label: Text(
                       (_newPhoto != null || existingAfter != null)
-                          ? 'تغيير صورة بعد المعالجة'
-                          : 'إضافة صورة بعد المعالجة'),
+                          ? tr('تغيير صورة بعد المعالجة')
+                          : tr('إضافة صورة بعد المعالجة')),
                 ),
               ],
               const SizedBox(height: 16),
               FilledButton.icon(
                 onPressed: _saving ? null : _save,
                 icon: const Icon(Icons.check),
-                label: const Text('حفظ'),
+                label: Text(tr('حفظ')),
                 style: FilledButton.styleFrom(
                     minimumSize: const Size.fromHeight(50)),
               ),

@@ -71,9 +71,9 @@ class _AdminShellState extends State<AdminShell> {
       await SyncService.sync();
       AppSettings.instance.setLastSync(DateTime.now());
     } on SyncException catch (e) {
-      msg = 'فشلت المزامنة: ${e.message}';
+      msg = trf('فشلت المزامنة: {0}', [e.message]);
     } catch (_) {
-      msg = 'فشلت المزامنة، راجع الإنترنت';
+      msg = tr('فشلت المزامنة، راجع الإنترنت');
     }
     if (!mounted) return;
     setState(() => _syncing = false);
@@ -83,9 +83,9 @@ class _AdminShellState extends State<AdminShell> {
     if (msg != null) {
       if (!silent) snack(context, msg);
     } else if (now > before) {
-      snack(context, 'وصل ${now - before} بلاغ جديد 🔔');
+      snack(context, trf('وصل {0} بلاغ جديد 🔔', [now - before]));
     } else if (!silent) {
-      snack(context, 'كل حاجة محدّثة ✅');
+      snack(context, tr('كل حاجة محدّثة ✅'));
     }
   }
 
@@ -135,8 +135,8 @@ class _AdminShellState extends State<AdminShell> {
                     Expanded(
                       child: Text(
                         list.isEmpty
-                            ? 'مفيش بلاغات جديدة'
-                            : 'بلاغات جديدة (${list.length})',
+                            ? tr('مفيش بلاغات جديدة')
+                            : trf('بلاغات جديدة ({0})', [list.length]),
                         style: Theme.of(context).textTheme.titleMedium,
                       ),
                     ),
@@ -146,7 +146,7 @@ class _AdminShellState extends State<AdminShell> {
                           Navigator.pop(ctx);
                           _markSeen();
                         },
-                        child: const Text('تعليم الكل كمقروء'),
+                        child: Text(tr('تعليم الكل كمقروء')),
                       ),
                   ],
                 ),
@@ -216,26 +216,26 @@ class _AdminShellState extends State<AdminShell> {
       bottomNavigationBar: NavigationBar(
         selectedIndex: _tab,
         onDestinationSelected: (i) => setState(() => _tab = i),
-        destinations: const [
+        destinations: [
           NavigationDestination(
             icon: Icon(Icons.dashboard_outlined),
             selectedIcon: Icon(Icons.dashboard),
-            label: 'الداشبورد',
+            label: tr('الداشبورد'),
           ),
           NavigationDestination(
             icon: Icon(Icons.factory_outlined),
             selectedIcon: Icon(Icons.factory),
-            label: 'المصانع',
+            label: tr('المصانع'),
           ),
           NavigationDestination(
             icon: Icon(Icons.group_outlined),
             selectedIcon: Icon(Icons.group),
-            label: 'المستخدمون',
+            label: tr('المستخدمون'),
           ),
           NavigationDestination(
             icon: Icon(Icons.settings_outlined),
             selectedIcon: Icon(Icons.settings),
-            label: 'الإعدادات',
+            label: tr('الإعدادات'),
           ),
         ],
       ),
@@ -336,9 +336,9 @@ class _AdminDashboard extends StatelessWidget {
                       const Icon(Icons.dashboard_rounded,
                           color: Colors.white, size: 28),
                       const SizedBox(width: 8),
-                      const Expanded(
+                      Expanded(
                         child: Text(
-                          'لوحة المدير العام',
+                          tr('لوحة المدير العام'),
                           style: TextStyle(
                             color: Colors.white,
                             fontSize: 20,
@@ -347,7 +347,7 @@ class _AdminDashboard extends StatelessWidget {
                         ),
                       ),
                       IconButton(
-                        tooltip: 'البلاغات الجديدة',
+                        tooltip: tr('البلاغات الجديدة'),
                         onPressed: onBell,
                         icon: Badge(
                           isLabelVisible: freshCount > 0,
@@ -367,7 +367,7 @@ class _AdminDashboard extends StatelessWidget {
                               ),
                             )
                           : IconButton(
-                              tooltip: 'مزامنة',
+                              tooltip: tr('مزامنة'),
                               onPressed: onSync,
                               icon: const Icon(Icons.cloud_sync,
                                   color: Colors.white),
@@ -377,11 +377,11 @@ class _AdminDashboard extends StatelessWidget {
                   const SizedBox(height: 14),
                   Row(
                     children: [
-                      _Stat('الإجمالي', all.total),
-                      _Stat('مفتوح', all.open),
-                      _Stat('جاري', all.prog),
-                      _Stat('مغلق', all.closed),
-                      _Stat('متأخر', all.overdue),
+                      _Stat(tr('الإجمالي'), all.total),
+                      _Stat(tr('مفتوح'), all.open),
+                      _Stat(tr('جاري'), all.prog),
+                      _Stat(tr('مغلق'), all.closed),
+                      _Stat(tr('متأخر'), all.overdue),
                     ],
                   ),
                 ],
@@ -394,14 +394,14 @@ class _AdminDashboard extends StatelessWidget {
                   physics: const AlwaysScrollableScrollPhysics(),
                   padding: const EdgeInsets.fromLTRB(14, 14, 14, 24),
                   children: [
-                    Text('المصانع',
+                    Text(tr('المصانع'),
                         style: Theme.of(context).textTheme.titleMedium),
                     const SizedBox(height: 8),
                     if (factories.isEmpty)
-                      const Padding(
+                      Padding(
                         padding: EdgeInsets.all(24),
                         child: Text(
-                          'لسه مفيش مصانع. ضيفها من تبويب "المصانع".',
+                          tr('لسه مفيش مصانع. ضيفها من تبويب "المصانع".'),
                           textAlign: TextAlign.center,
                         ),
                       ),
@@ -414,7 +414,7 @@ class _AdminDashboard extends StatelessWidget {
                       ),
                     if (recent.isNotEmpty) ...[
                       const SizedBox(height: 14),
-                      Text('أحدث البلاغات',
+                      Text(tr('أحدث البلاغات'),
                           style: Theme.of(context).textTheme.titleMedium),
                       const SizedBox(height: 4),
                       for (final r in recent.take(5))
@@ -478,14 +478,14 @@ class _FactoryCard extends StatelessWidget {
                             style: const TextStyle(
                                 fontWeight: FontWeight.bold, fontSize: 16)),
                         const SizedBox(height: 2),
-                        Text('${counts.total} بلاغ',
+                        Text(trf('{0} بلاغ', [counts.total]),
                             style: const TextStyle(
                                 color: Colors.grey, fontSize: 12)),
                       ],
                     ),
                   ),
                   if (counts.overdue > 0)
-                    _Badge('${counts.overdue} متأخر', const Color(0xFFB71C1C),
+                    _Badge(trf('{0} متأخر', [counts.overdue]), const Color(0xFFB71C1C),
                         icon: Icons.schedule),
                   const Icon(Icons.chevron_left),
                 ],
@@ -493,9 +493,9 @@ class _FactoryCard extends StatelessWidget {
               const SizedBox(height: 12),
               Row(
                 children: [
-                  _mini('مفتوح', counts.open, statusColor('Open')),
-                  _mini('جاري', counts.prog, statusColor('In progress')),
-                  _mini('مغلق', counts.closed, statusColor('Closed')),
+                  _mini(tr('مفتوح'), counts.open, statusColor('Open')),
+                  _mini(tr('جاري'), counts.prog, statusColor('In progress')),
+                  _mini(tr('مغلق'), counts.closed, statusColor('Closed')),
                 ],
               ),
               const SizedBox(height: 10),
@@ -511,7 +511,7 @@ class _FactoryCard extends StatelessWidget {
                       child: LinearProgressIndicator(value: v, minHeight: 8),
                     ),
                     const SizedBox(height: 4),
-                    Text('نسبة الإغلاق ${(v * 100).round()}%',
+                    Text(trf('نسبة الإغلاق {0}%', [(v * 100).round()]),
                         style:
                             const TextStyle(fontSize: 11, color: Colors.grey)),
                   ],
@@ -597,7 +597,7 @@ class _FactoryReportsScreenState extends State<FactoryReportsScreen> {
   }
 
   Future<void> _export(String kind) async {
-    final title = 'سجل المخالفات البيئية - ${widget.factory.name}';
+    final title = trf('سجل المخالفات البيئية - {0}', [widget.factory.name]);
     if (kind == 'pdf') {
       await exportPdf(context, _filtered, title);
     } else {
@@ -630,16 +630,16 @@ class _FactoryReportsScreenState extends State<FactoryReportsScreen> {
                       child: CircularProgressIndicator(strokeWidth: 2)),
                 )
               : IconButton(
-                  tooltip: 'مزامنة',
+                  tooltip: tr('مزامنة'),
                   onPressed: _sync,
                   icon: const Icon(Icons.cloud_sync)),
           PopupMenuButton<String>(
-            tooltip: 'تصدير',
+            tooltip: tr('تصدير'),
             icon: const Icon(Icons.ios_share),
             onSelected: _export,
-            itemBuilder: (_) => const [
-              PopupMenuItem(value: 'pdf', child: Text('تصدير PDF (بالصور)')),
-              PopupMenuItem(value: 'csv', child: Text('تصدير Excel / CSV')),
+            itemBuilder: (_) => [
+              PopupMenuItem(value: 'pdf', child: Text(tr('تصدير PDF (بالصور)'))),
+              PopupMenuItem(value: 'csv', child: Text(tr('تصدير Excel / CSV'))),
             ],
           ),
         ],
@@ -647,7 +647,7 @@ class _FactoryReportsScreenState extends State<FactoryReportsScreen> {
       floatingActionButton: FloatingActionButton.extended(
         onPressed: _openNew,
         icon: const Icon(Icons.add_a_photo),
-        label: const Text('تسجيل مخالفة'),
+        label: Text(tr('تسجيل مخالفة')),
       ),
       body: _loading
           ? const Center(child: CircularProgressIndicator())
@@ -662,11 +662,11 @@ class _FactoryReportsScreenState extends State<FactoryReportsScreen> {
                   ),
                   child: Row(
                     children: [
-                      _Stat('الإجمالي', c.total),
-                      _Stat('مفتوح', c.open),
-                      _Stat('جاري', c.prog),
-                      _Stat('مغلق', c.closed),
-                      _Stat('متأخر', c.overdue),
+                      _Stat(tr('الإجمالي'), c.total),
+                      _Stat(tr('مفتوح'), c.open),
+                      _Stat(tr('جاري'), c.prog),
+                      _Stat(tr('مغلق'), c.closed),
+                      _Stat(tr('متأخر'), c.overdue),
                     ],
                   ),
                 ),
@@ -680,7 +680,7 @@ class _FactoryReportsScreenState extends State<FactoryReportsScreen> {
                       Padding(
                         padding: const EdgeInsets.symmetric(horizontal: 4),
                         child: ChoiceChip(
-                          label: const Text('الكل'),
+                          label: Text(tr('الكل')),
                           selected: _status == null,
                           onSelected: (_) => setState(() => _status = null),
                         ),
@@ -700,7 +700,7 @@ class _FactoryReportsScreenState extends State<FactoryReportsScreen> {
                 ),
                 Expanded(
                   child: list.isEmpty
-                      ? const Center(child: Text('مفيش بلاغات هنا.'))
+                      ? Center(child: Text(tr('مفيش بلاغات هنا.')))
                       : RefreshIndicator(
                           onRefresh: _sync,
                           child: ListView.builder(
@@ -741,15 +741,15 @@ class FactoriesAdminTab extends StatelessWidget {
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('حذف المصنع'),
-        content: Text('هتحذف "${f.name}". لو عليه بلاغات مش هيتحذف.'),
+        title: Text(tr('حذف المصنع')),
+        content: Text(trf('هتحذف "{0}". لو عليه بلاغات مش هيتحذف.', [f.name])),
         actions: [
           TextButton(
               onPressed: () => Navigator.pop(ctx, false),
-              child: const Text('إلغاء')),
+              child: Text(tr('إلغاء'))),
           FilledButton(
               onPressed: () => Navigator.pop(ctx, true),
-              child: const Text('حذف')),
+              child: Text(tr('حذف'))),
         ],
       ),
     );
@@ -760,29 +760,29 @@ class FactoriesAdminTab extends StatelessWidget {
     } on SyncException catch (e) {
       if (context.mounted) snack(context, e.message);
     } catch (_) {
-      if (context.mounted) snack(context, 'فشل الحذف');
+      if (context.mounted) snack(context, tr('فشل الحذف'));
     }
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('المصانع')),
+      appBar: AppBar(title: Text(tr('المصانع'))),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: () => _edit(context, null),
         icon: const Icon(Icons.add_business),
-        label: const Text('إضافة مصنع'),
+        label: Text(tr('إضافة مصنع')),
       ),
       body: ListenableBuilder(
         listenable: FactoryStore.instance,
         builder: (context, _) {
           final items = FactoryStore.instance.items;
           if (items.isEmpty) {
-            return const Center(
+            return Center(
               child: Padding(
                 padding: EdgeInsets.all(32),
                 child: Text(
-                  'لسه مفيش مصانع.\nاضغط "إضافة مصنع" واكتب الاسم وارفع الشعار.',
+                  tr('لسه مفيش مصانع.\nاضغط "إضافة مصنع" واكتب الاسم وارفع الشعار.'),
                   textAlign: TextAlign.center,
                 ),
               ),
@@ -807,12 +807,12 @@ class FactoriesAdminTab extends StatelessWidget {
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         IconButton(
-                          tooltip: 'تعديل',
+                          tooltip: tr('تعديل'),
                           icon: const Icon(Icons.edit_outlined),
                           onPressed: () => _edit(context, f),
                         ),
                         IconButton(
-                          tooltip: 'حذف',
+                          tooltip: tr('حذف'),
                           icon: const Icon(Icons.delete_outline),
                           onPressed: () => _delete(context, f),
                         ),
@@ -859,7 +859,7 @@ class _FactoryFormState extends State<_FactoryForm> {
   Future<void> _save() async {
     final name = _name.text.trim();
     if (name.isEmpty) {
-      setState(() => _error = 'اكتب اسم المصنع');
+      setState(() => _error = tr('اكتب اسم المصنع'));
       return;
     }
     setState(() {
@@ -883,7 +883,7 @@ class _FactoryFormState extends State<_FactoryForm> {
       if (mounted) {
         setState(() {
           _busy = false;
-          _error = 'مقدرناش نوصل للسيرفر';
+          _error = tr('مقدرناش نوصل للسيرفر');
         });
       }
     }
@@ -893,7 +893,7 @@ class _FactoryFormState extends State<_FactoryForm> {
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
     return AlertDialog(
-      title: Text(widget.factory == null ? 'إضافة مصنع' : 'تعديل المصنع'),
+      title: Text(widget.factory == null ? tr('إضافة مصنع') : tr('تعديل المصنع')),
       content: SingleChildScrollView(
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -919,7 +919,7 @@ class _FactoryFormState extends State<_FactoryForm> {
                               Icon(Icons.add_photo_alternate_outlined,
                                   size: 34, color: cs.primary),
                               const SizedBox(height: 4),
-                              const Text('الشعار',
+                              Text(tr('الشعار'),
                                   style: TextStyle(fontSize: 12)),
                             ],
                           )),
@@ -928,7 +928,7 @@ class _FactoryFormState extends State<_FactoryForm> {
             const SizedBox(height: 14),
             TextField(
               controller: _name,
-              decoration: deco('اسم المصنع', icon: Icons.factory_outlined),
+              decoration: deco(tr('اسم المصنع'), icon: Icons.factory_outlined),
             ),
             if (_error != null)
               Padding(
@@ -943,7 +943,7 @@ class _FactoryFormState extends State<_FactoryForm> {
       actions: [
         TextButton(
             onPressed: _busy ? null : () => Navigator.pop(context, false),
-            child: const Text('إلغاء')),
+            child: Text(tr('إلغاء'))),
         FilledButton(
           onPressed: _busy ? null : _save,
           child: _busy
@@ -951,7 +951,7 @@ class _FactoryFormState extends State<_FactoryForm> {
                   width: 18,
                   height: 18,
                   child: CircularProgressIndicator(strokeWidth: 2))
-              : const Text('حفظ'),
+              : Text(tr('حفظ')),
         ),
       ],
     );
@@ -1000,14 +1000,14 @@ class _UsersAdminTabState extends State<UsersAdminTab> {
       if (!mounted) return;
       setState(() {
         _loading = false;
-        _error = 'تعذّر تحميل المستخدمين';
+        _error = tr('تعذّر تحميل المستخدمين');
       });
     }
   }
 
   Future<void> _add() async {
     if (FactoryStore.instance.items.isEmpty) {
-      snack(context, 'ضيف مصنع الأول من تبويب المصانع');
+      snack(context, tr('ضيف مصنع الأول من تبويب المصانع'));
       return;
     }
     final ok = await showDialog<bool>(
@@ -1015,17 +1015,17 @@ class _UsersAdminTabState extends State<UsersAdminTab> {
       builder: (_) => const _UserForm(),
     );
     if (ok == true) {
-      if (mounted) snack(context, 'تم إنشاء الحساب ✅');
+      if (mounted) snack(context, tr('تم إنشاء الحساب ✅'));
       _load();
     }
   }
 
   Future<void> _reset(AppUser u) async {
-    final pw = await askText(context, 'باسورد جديد لـ ${u.username}');
+    final pw = await askText(context, trf('باسورد جديد لـ {0}', [u.username]));
     if (pw == null || pw.trim().isEmpty) return;
     try {
       await AdminApi.resetPassword(u.id, pw.trim());
-      if (mounted) snack(context, 'تم تغيير الباسورد ✅');
+      if (mounted) snack(context, tr('تم تغيير الباسورد ✅'));
     } on SyncException catch (e) {
       if (mounted) snack(context, e.message);
     }
@@ -1035,15 +1035,15 @@ class _UsersAdminTabState extends State<UsersAdminTab> {
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('حذف الحساب'),
-        content: Text('هتحذف حساب "${u.username}". بلاغاته القديمة هتفضل.'),
+        title: Text(tr('حذف الحساب')),
+        content: Text(trf('هتحذف حساب "{0}". بلاغاته القديمة هتفضل.', [u.username])),
         actions: [
           TextButton(
               onPressed: () => Navigator.pop(ctx, false),
-              child: const Text('إلغاء')),
+              child: Text(tr('إلغاء'))),
           FilledButton(
               onPressed: () => Navigator.pop(ctx, true),
-              child: const Text('حذف')),
+              child: Text(tr('حذف'))),
         ],
       ),
     );
@@ -1060,10 +1060,10 @@ class _UsersAdminTabState extends State<UsersAdminTab> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('المستخدمون'),
+        title: Text(tr('المستخدمون')),
         actions: [
           IconButton(
-              tooltip: 'تحديث',
+              tooltip: tr('تحديث'),
               onPressed: _load,
               icon: const Icon(Icons.refresh)),
         ],
@@ -1071,7 +1071,7 @@ class _UsersAdminTabState extends State<UsersAdminTab> {
       floatingActionButton: FloatingActionButton.extended(
         onPressed: _add,
         icon: const Icon(Icons.person_add_alt_1),
-        label: const Text('إضافة مبلّغ'),
+        label: Text(tr('إضافة مبلّغ')),
       ),
       body: _loading
           ? const Center(child: CircularProgressIndicator())
@@ -1087,7 +1087,7 @@ class _UsersAdminTabState extends State<UsersAdminTab> {
                         OutlinedButton.icon(
                           onPressed: _load,
                           icon: const Icon(Icons.refresh),
-                          label: const Text('إعادة المحاولة'),
+                          label: Text(tr('إعادة المحاولة')),
                         ),
                       ],
                     ),
@@ -1112,7 +1112,7 @@ class _UsersAdminTabState extends State<UsersAdminTab> {
                         ),
                         subtitle: Text(
                           isAdmin
-                              ? 'مدير عام • ${u.username}'
+                              ? trf('مدير عام • {0}', [u.username])
                               : '${FactoryStore.instance.nameOf(u.factoryId)} • ${u.username}',
                         ),
                         trailing: isAdmin
@@ -1120,12 +1120,12 @@ class _UsersAdminTabState extends State<UsersAdminTab> {
                             : PopupMenuButton<String>(
                                 onSelected: (v) =>
                                     v == 'pw' ? _reset(u) : _delete(u),
-                                itemBuilder: (_) => const [
+                                itemBuilder: (_) => [
                                   PopupMenuItem(
                                       value: 'pw',
-                                      child: Text('تغيير الباسورد')),
+                                      child: Text(tr('تغيير الباسورد'))),
                                   PopupMenuItem(
-                                      value: 'del', child: Text('حذف الحساب')),
+                                      value: 'del', child: Text(tr('حذف الحساب'))),
                                 ],
                               ),
                       ),
@@ -1161,7 +1161,7 @@ class _UserFormState extends State<_UserForm> {
 
   Future<void> _save() async {
     if (_factoryId == null) {
-      setState(() => _error = 'اختار المصنع');
+      setState(() => _error = tr('اختار المصنع'));
       return;
     }
     setState(() {
@@ -1187,7 +1187,7 @@ class _UserFormState extends State<_UserForm> {
       if (mounted) {
         setState(() {
           _busy = false;
-          _error = 'مقدرناش نوصل للسيرفر';
+          _error = tr('مقدرناش نوصل للسيرفر');
         });
       }
     }
@@ -1197,7 +1197,7 @@ class _UserFormState extends State<_UserForm> {
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
     return AlertDialog(
-      title: const Text('إضافة مبلّغ'),
+      title: Text(tr('إضافة مبلّغ')),
       content: SingleChildScrollView(
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -1205,14 +1205,14 @@ class _UserFormState extends State<_UserForm> {
           children: [
             TextField(
               controller: _name,
-              decoration: deco('الاسم', icon: Icons.badge_outlined),
+              decoration: deco(tr('الاسم'), icon: Icons.badge_outlined),
             ),
             const SizedBox(height: 10),
             TextField(
               controller: _user,
               textDirection: TextDirection.ltr,
               autocorrect: false,
-              decoration: deco('اسم المستخدم (إنجليزي)',
+              decoration: deco(tr('اسم المستخدم (إنجليزي)'),
                   icon: Icons.person_outline),
             ),
             const SizedBox(height: 10),
@@ -1220,10 +1220,10 @@ class _UserFormState extends State<_UserForm> {
               controller: _pass,
               textDirection: TextDirection.ltr,
               decoration:
-                  deco('الباسورد (٦ حروف على الأقل)', icon: Icons.lock_outline),
+                  deco(tr('الباسورد (٦ حروف على الأقل)'), icon: Icons.lock_outline),
             ),
             const SizedBox(height: 14),
-            const Text('المصنع', style: TextStyle(fontWeight: FontWeight.bold)),
+            Text(tr('المصنع'), style: TextStyle(fontWeight: FontWeight.bold)),
             const SizedBox(height: 6),
             Wrap(
               spacing: 8,
@@ -1250,7 +1250,7 @@ class _UserFormState extends State<_UserForm> {
       actions: [
         TextButton(
             onPressed: _busy ? null : () => Navigator.pop(context, false),
-            child: const Text('إلغاء')),
+            child: Text(tr('إلغاء'))),
         FilledButton(
           onPressed: _busy ? null : _save,
           child: _busy
@@ -1258,7 +1258,7 @@ class _UserFormState extends State<_UserForm> {
                   width: 18,
                   height: 18,
                   child: CircularProgressIndicator(strokeWidth: 2))
-              : const Text('إنشاء'),
+              : Text(tr('إنشاء')),
         ),
       ],
     );
