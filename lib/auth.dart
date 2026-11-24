@@ -64,10 +64,10 @@ class Session extends ChangeNotifier {
     final base = s.baseUrl;
     final key = s.serverKey.trim();
     if (base.isEmpty || key.isEmpty || base.contains('PUT-YOUR')) {
-      return 'رابط السيرفر مش متظبط في التطبيق';
+      return tr('رابط السيرفر مش متظبط في التطبيق');
     }
     final u = user.trim().toLowerCase();
-    if (u.isEmpty || password.isEmpty) return 'اكتب اسم المستخدم والباسورد';
+    if (u.isEmpty || password.isEmpty) return tr('اكتب اسم المستخدم والباسورد');
     try {
       final res = await http
           .post(
@@ -77,7 +77,7 @@ class Session extends ChangeNotifier {
           )
           .timeout(const Duration(seconds: 30));
       if (res.statusCode == 400 || res.statusCode == 401) {
-        return 'اسم المستخدم أو الباسورد غلط';
+        return tr('اسم المستخدم أو الباسورد غلط');
       }
       if (res.statusCode != 200) return 'فشل الدخول (كود ${res.statusCode})';
       final j = jsonDecode(utf8.decode(res.bodyBytes)) as Map<String, dynamic>;
@@ -95,14 +95,14 @@ class Session extends ChangeNotifier {
         return 'تعذّر تحميل بيانات الحساب (كود ${pr.statusCode})';
       }
       final rows = jsonDecode(utf8.decode(pr.bodyBytes)) as List;
-      if (rows.isEmpty) return 'الحساب ده غير مفعّل. كلّم المدير';
+      if (rows.isEmpty) return tr('الحساب ده غير مفعّل. كلّم المدير');
       final p = rows.first as Map<String, dynamic>;
       final r = (p['role'] ?? 'reporter') as String;
       final fid = p['factory_id'] as String?;
       if (r != 'admin') {
-        if (fid == null) return 'الحساب مش مربوط بمصنع. كلّم المدير';
+        if (fid == null) return tr('الحساب مش مربوط بمصنع. كلّم المدير');
         if (pickedFactoryId != null && fid != pickedFactoryId) {
-          return 'الحساب ده مش تابع للمصنع اللي اخترته';
+          return tr('الحساب ده مش تابع للمصنع اللي اخترته');
         }
       }
 
@@ -130,7 +130,7 @@ class Session extends ChangeNotifier {
       notifyListeners();
       return null;
     } catch (_) {
-      return 'مقدرناش نوصل للسيرفر. راجع الإنترنت';
+      return tr('مقدرناش نوصل للسيرفر. راجع الإنترنت');
     }
   }
 
@@ -264,7 +264,7 @@ class FactoryStore extends ChangeNotifier {
         error = 'تعذّر تحميل المصانع (كود ${res.statusCode})';
       }
     } catch (_) {
-      error = 'مقدرناش نوصل للسيرفر. راجع الإنترنت';
+      error = tr('مقدرناش نوصل للسيرفر. راجع الإنترنت');
     }
     loading = false;
     notifyListeners();
@@ -307,7 +307,7 @@ class AdminApi {
           )
           .timeout(_t);
     } catch (_) {
-      throw SyncException('مقدرناش نوصل للسيرفر. راجع الإنترنت');
+      throw SyncException(tr('مقدرناش نوصل للسيرفر. راجع الإنترنت'));
     }
     if (res.statusCode == 404) {
       throw SyncException('دالة manage-users مش منشورة في Supabase لسه');

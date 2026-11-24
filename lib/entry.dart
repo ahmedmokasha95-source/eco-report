@@ -134,9 +134,9 @@ class _SplashScreenState extends State<SplashScreen>
                     opacity: _title.value,
                     child: Transform.translate(
                       offset: Offset(0, (1 - _title.value) * 24),
-                      child: const Text(
-                        'رصد المخلفات البيئية',
-                        style: TextStyle(
+                      child: Text(
+                        tr('رصد المخلفات البيئية'),
+                        style: const TextStyle(
                           color: Colors.white,
                           fontSize: 26,
                           fontWeight: FontWeight.bold,
@@ -149,9 +149,9 @@ class _SplashScreenState extends State<SplashScreen>
                     opacity: _tag.value,
                     child: Transform.translate(
                       offset: Offset(0, (1 - _tag.value) * 16),
-                      child: const Text(
-                        kTagline,
-                        style: TextStyle(
+                      child: Text(
+                        tr(kTagline),
+                        style: const TextStyle(
                           color: Color(0xCCFFFFFF),
                           fontSize: 16,
                           letterSpacing: 0.5,
@@ -288,22 +288,22 @@ class _FactoryPickerScreenState extends State<FactoryPickerScreen>
                   borderRadius:
                       const BorderRadius.vertical(bottom: Radius.circular(32)),
                 ),
-                child: const Column(
+                child: Column(
                   children: [
-                    Icon(Icons.eco_rounded, color: Colors.white, size: 40),
-                    SizedBox(height: 10),
+                    const Icon(Icons.eco_rounded, color: Colors.white, size: 40),
+                    const SizedBox(height: 10),
                     Text(
-                      'اختر مصنعك',
-                      style: TextStyle(
+                      tr('اختر مصنعك'),
+                      style: const TextStyle(
                         color: Colors.white,
                         fontSize: 24,
                         fontWeight: FontWeight.bold,
                       ),
                     ),
-                    SizedBox(height: 6),
+                    const SizedBox(height: 6),
                     Text(
-                      'اضغط على شعار مصنعك لتسجيل الدخول',
-                      style: TextStyle(color: Color(0xCCFFFFFF)),
+                      tr('اضغط على شعار مصنعك لتسجيل الدخول'),
+                      style: const TextStyle(color: Color(0xCCFFFFFF)),
                     ),
                   ],
                 ),
@@ -323,14 +323,14 @@ class _FactoryPickerScreenState extends State<FactoryPickerScreen>
                                     const SizedBox(height: 12),
                                     Text(
                                       st.error ??
-                                          'لسه مفيش مصانع. المدير يدخل ويضيفها.',
+                                          tr('لسه مفيش مصانع. المدير يدخل ويضيفها.'),
                                       textAlign: TextAlign.center,
                                     ),
                                     const SizedBox(height: 12),
                                     OutlinedButton.icon(
                                       onPressed: st.refresh,
                                       icon: const Icon(Icons.refresh),
-                                      label: const Text('إعادة المحاولة'),
+                                      label: Text(tr('إعادة المحاولة')),
                                     ),
                                   ],
                                 ),
@@ -360,7 +360,7 @@ class _FactoryPickerScreenState extends State<FactoryPickerScreen>
                   child: TextButton.icon(
                     onPressed: () => _open(null),
                     icon: const Icon(Icons.admin_panel_settings_outlined),
-                    label: const Text('دخول المدير العام'),
+                    label: Text(tr('دخول المدير العام')),
                   ),
                 ),
               ),
@@ -393,6 +393,7 @@ class _LoginScreenState extends State<LoginScreen>
   final TextEditingController _pass = TextEditingController();
   bool _hide = true;
   bool _busy = false;
+  bool _bioReady = false;
   String? _error;
 
   @override
@@ -401,6 +402,49 @@ class _LoginScreenState extends State<LoginScreen>
     Future.delayed(const Duration(milliseconds: 350), () {
       if (mounted) _c.forward();
     });
+    _initBio();
+  }
+
+  Future<void> _initBio() async {
+    final ok = await Bio.hasSaved() && await Bio.available();
+    if (!mounted || !ok) return;
+    setState(() => _bioReady = true);
+    // أول ما الشاشة تفتح، اطلب البصمة على طول
+    await Future.delayed(const Duration(milliseconds: 700));
+    if (mounted) _bioLogin();
+  }
+
+  void _enter() {
+    FactoryStore.instance.refresh();
+    Navigator.of(context).pushAndRemoveUntil(
+      fadeRoute(homeForSession(), ms: 700),
+      (route) => false,
+    );
+  }
+
+  Future<void> _bioLogin() async {
+    if (_busy) return;
+    setState(() {
+      _busy = true;
+      _error = null;
+    });
+    final cred = await Bio.unlock();
+    if (!mounted) return;
+    if (cred == null) {
+      setState(() => _busy = false);
+      return;
+    }
+    final err = await Session.instance
+        .login(cred['user']!, cred['pass']!, widget.factory?.id);
+    if (!mounted) return;
+    if (err != null) {
+      setState(() {
+        _busy = false;
+        _error = err;
+      });
+      return;
+    }
+    _enter();
   }
 
   @override
@@ -418,6 +462,8 @@ class _LoginScreenState extends State<LoginScreen>
       _busy = true;
       _error = null;
     });
+    final typedUser = _user.text.trim().toLowerCase();
+    final typedPass = _pass.text;
     final err = await Session.instance
         .login(_user.text, _pass.text, widget.factory?.id);
     if (!mounted) return;
@@ -428,11 +474,37 @@ class _LoginScreenState extends State<LoginScreen>
       });
       return;
     }
-    FactoryStore.instance.refresh();
-    Navigator.of(context).pushAndRemoveUntil(
-      fadeRoute(homeForSession(), ms: 700),
-      (route) => false,
+    await _offerBio(typedUser, typedPass);
+    if (!mounted) return;
+    _enter();
+  }
+
+  /// بعد دخول ناجح بالباسورد: اعرض تفعيل البصمة (أو حدّث البيانات المحفوظة).
+  Future<void> _offerBio(String user, String pass) async {
+    if (!await Bio.available()) return;
+    if (await Bio.hasSaved()) {
+      if (await Bio.savedUser() == user) await Bio.save(user, pass);
+      return;
+    }
+    if (!mounted) return;
+    final yes = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        icon: const Icon(Icons.fingerprint, size: 40),
+        title: Text(tr('تفعيل الدخول بالبصمة؟')),
+        content: Text(
+            tr('هتدخل المرة الجاية بالبصمة بدل اسم المستخدم وكلمة المرور.')),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: Text(tr('مش دلوقتي'))),
+          FilledButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              child: Text(tr('تفعيل'))),
+        ],
+      ),
     );
+    if (yes == true) await Bio.save(user, pass);
   }
 
   @override
@@ -468,7 +540,7 @@ class _LoginScreenState extends State<LoginScreen>
                             ),
                       const SizedBox(height: 14),
                       Text(
-                        f?.name ?? 'المدير العام',
+                        f?.name ?? tr('المدير العام'),
                         textAlign: TextAlign.center,
                         style: const TextStyle(
                           color: Colors.white,
@@ -501,7 +573,7 @@ class _LoginScreenState extends State<LoginScreen>
                                   textInputAction: TextInputAction.next,
                                   autocorrect: false,
                                   enableSuggestions: false,
-                                  decoration: deco('اسم المستخدم',
+                                  decoration: deco(tr('اسم المستخدم'),
                                       icon: Icons.person_outline),
                                 ),
                                 const SizedBox(height: 14),
@@ -512,7 +584,7 @@ class _LoginScreenState extends State<LoginScreen>
                                   textInputAction: TextInputAction.done,
                                   onSubmitted: (_) => _submit(),
                                   decoration: InputDecoration(
-                                    labelText: 'كلمة المرور',
+                                    labelText: tr('كلمة المرور'),
                                     prefixIcon: const Icon(Icons.lock_outline),
                                     suffixIcon: IconButton(
                                       icon: Icon(_hide
@@ -548,9 +620,19 @@ class _LoginScreenState extends State<LoginScreen>
                                           child: CircularProgressIndicator(
                                               strokeWidth: 2.5),
                                         )
-                                      : const Text('دخول',
-                                          style: TextStyle(fontSize: 17)),
+                                      : Text(tr('دخول'),
+                                          style: const TextStyle(fontSize: 17)),
                                 ),
+                                if (_bioReady) ...[
+                                  const SizedBox(height: 10),
+                                  OutlinedButton.icon(
+                                    onPressed: _busy ? null : _bioLogin,
+                                    icon: const Icon(Icons.fingerprint),
+                                    label: Text(tr('دخول بالبصمة')),
+                                    style: OutlinedButton.styleFrom(
+                                        minimumSize: const Size.fromHeight(46)),
+                                  ),
+                                ],
                               ],
                             ),
                           ),

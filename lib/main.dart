@@ -6,10 +6,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_map/flutter_map.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:http/http.dart' as http;
 import 'package:image_picker/image_picker.dart';
 import 'package:latlong2/latlong.dart' show LatLng;
+import 'package:local_auth/local_auth.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:pdf/pdf.dart' show PdfColors, PdfPageFormat;
 import 'package:pdf/widgets.dart' as pw;
@@ -22,6 +24,8 @@ part 'config.dart';
 part 'auth.dart';
 part 'entry.dart';
 part 'admin.dart';
+part 'l10n.dart';
+part 'biometric.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -1052,6 +1056,7 @@ class AppSettings extends ChangeNotifier {
   int seedIndex = 0;
   int cardStyle = 0; // 0 = مضغوطة، 1 = بطاقات كبيرة
   int textSize = 1;
+  String lang = 'ar'; // ar | en
   bool syncEnabled = false;
   String serverUrl = '';
   String serverKey = '';
@@ -1082,6 +1087,7 @@ class AppSettings extends ChangeNotifier {
       seedIndex = _ci(p.getInt('set_seed') ?? 0, 0, seeds.length - 1);
       cardStyle = _ci(p.getInt('set_cards') ?? 0, 0, 1);
       textSize = _ci(p.getInt('set_text') ?? 1, 0, textScales.length - 1);
+      lang = p.getString('set_lang') == 'en' ? 'en' : 'ar';
       syncEnabled = p.getBool('set_sync') ?? false;
       serverUrl = p.getString('set_url') ?? '';
       serverKey = p.getString('set_key') ?? '';
@@ -1105,6 +1111,7 @@ class AppSettings extends ChangeNotifier {
       await p.setInt('set_seed', seedIndex);
       await p.setInt('set_cards', cardStyle);
       await p.setInt('set_text', textSize);
+      await p.setString('set_lang', lang);
       await p.setBool('set_sync', syncEnabled);
       await p.setString('set_url', serverUrl);
       await p.setString('set_key', serverKey);
@@ -1137,6 +1144,11 @@ class AppSettings extends ChangeNotifier {
 
   void setTextSize(int i) {
     textSize = i;
+    _changed();
+  }
+
+  void setLang(String v) {
+    lang = v == 'en' ? 'en' : 'ar';
     _changed();
   }
 
@@ -1519,10 +1531,10 @@ class EcoReportApp extends StatelessWidget {
       builder: (context, _) {
         final s = AppSettings.instance;
         return MaterialApp(
-      title: 'رصد المخلفات',
+      title: tr('رصد المخلفات'),
       debugShowCheckedModeBanner: false,
-      locale: const Locale('ar'),
-      supportedLocales: const [Locale('ar')],
+      locale: Locale(s.lang),
+      supportedLocales: const [Locale('ar'), Locale('en')],
       localizationsDelegates: const [
         GlobalMaterialLocalizations.delegate,
         GlobalWidgetsLocalizations.delegate,
@@ -2370,12 +2382,12 @@ class _SettingsTabState extends State<SettingsTab> {
         : 'آخر مزامنة: ${fmtDate(last)}  ${_two(last.hour)}:${_two(last.minute)}';
 
     return Scaffold(
-      appBar: AppBar(title: const Text('الإعدادات')),
+      appBar: AppBar(title: Text(tr('الإعدادات'))),
       body: ListView(
         padding: const EdgeInsets.all(14),
         children: [
           if (Session.instance.loggedIn)
-            _section('حسابي', Icons.account_circle_outlined, [
+            _section(tr('حسابي'), Icons.account_circle_outlined, [
               Text(
                 Session.instance.fullName.isEmpty
                     ? Session.instance.username
@@ -2394,27 +2406,58 @@ class _SettingsTabState extends State<SettingsTab> {
               OutlinedButton.icon(
                 onPressed: () => logoutFlow(context),
                 icon: const Icon(Icons.logout),
-                label: const Text('تسجيل الخروج'),
+                label: Text(tr('تسجيل الخروج')),
               ),
             ]),
-          _section('المظهر', Icons.palette_outlined, [
-            _label('نمط الألوان'),
+          _section(tr('اللغة'), Icons.language, [
             Wrap(
               spacing: 8,
               runSpacing: 4,
               children: [
-                _chip('تلقائي', s.themeMode == ThemeMode.system,
+                _chip('العربية', s.lang == 'ar', () => s.setLang('ar'),
+                    icon: Icons.translate),
+                _chip('English', s.lang == 'en', () => s.setLang('en'),
+                    icon: Icons.translate),
+              ],
+            ),
+            FutureBuilder<bool>(
+              future: Bio.hasSaved(),
+              builder: (context, snap) {
+                if (snap.data != true) return const SizedBox.shrink();
+                return Padding(
+                  padding: const EdgeInsets.only(top: 10),
+                  child: OutlinedButton.icon(
+                    onPressed: () async {
+                      await Bio.forget();
+                      if (!context.mounted) return;
+                      setState(() {});
+                      snack(context, tr('تم مسح بيانات الدخول بالبصمة'));
+                    },
+                    icon: const Icon(Icons.fingerprint),
+                    label: Text(tr('مسح بيانات الدخول بالبصمة')),
+                  ),
+                );
+              },
+            ),
+          ]),
+          _section(tr('المظهر'), Icons.palette_outlined, [
+            _label(tr('نمط الألوان')),
+            Wrap(
+              spacing: 8,
+              runSpacing: 4,
+              children: [
+                _chip(tr('تلقائي'), s.themeMode == ThemeMode.system,
                     () => s.setThemeMode(ThemeMode.system),
                     icon: Icons.brightness_auto),
-                _chip('فاتح', s.themeMode == ThemeMode.light,
+                _chip(tr('فاتح'), s.themeMode == ThemeMode.light,
                     () => s.setThemeMode(ThemeMode.light),
                     icon: Icons.light_mode),
-                _chip('داكن', s.themeMode == ThemeMode.dark,
+                _chip(tr('داكن'), s.themeMode == ThemeMode.dark,
                     () => s.setThemeMode(ThemeMode.dark),
                     icon: Icons.dark_mode),
               ],
             ),
-            _label('لون التطبيق'),
+            _label(tr('لون التطبيق')),
             Wrap(
               spacing: 10,
               runSpacing: 10,
