@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
@@ -17,10 +18,17 @@ import 'package:share_plus/share_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+part 'config.dart';
+part 'auth.dart';
+part 'entry.dart';
+part 'admin.dart';
+
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await AppSettings.instance.load();
   await OptionStore.load();
+  await Session.instance.load();
+  await FactoryStore.instance.loadCache();
   runApp(const EcoReportApp());
 }
 
@@ -202,6 +210,7 @@ class Report {
   String? closedImageUrl;
   bool remote;
   bool dirty;
+  String? factoryId;
 
   Report({
     required this.id,
@@ -227,6 +236,7 @@ class Report {
     this.closedImageUrl,
     this.remote = false,
     this.dirty = false,
+    this.factoryId,
   })  : impacts = impacts ?? <String>[],
         updatedAt = updatedAt ?? createdAt;
 
@@ -251,6 +261,7 @@ class Report {
         'image_url': imageUrl,
         'closed_image_url': closedImageUrl,
         'updated_at': updatedAt.toUtc().toIso8601String(),
+        'factory_id': factoryId,
       };
 
   Map<String, dynamic> toJson() => {
@@ -277,6 +288,7 @@ class Report {
         'closedImageUrl': closedImageUrl,
         'remote': remote,
         'dirty': dirty,
+        'factoryId': factoryId,
       };
 
   factory Report.fromJson(Map<String, dynamic> j) => Report(
@@ -311,6 +323,7 @@ class Report {
         closedImageUrl: j['closedImageUrl'] as String?,
         remote: (j['remote'] ?? false) as bool,
         dirty: (j['dirty'] ?? false) as bool,
+        factoryId: j['factoryId'] as String?,
       );
 
   Report copy() => Report.fromJson(toJson());
@@ -380,6 +393,7 @@ class ReportStore {
     final prefs = await SharedPreferences.getInstance();
     final list = await load();
     var counter = prefs.getInt(_counterKey) ?? 0;
+    r.factoryId ??= Session.instance.activeFactoryId;
     if (AppSettings.instance.syncActive) {
       // الرقم بيتحدد من السيرفر بعد المزامنة.
       r.no = 0;
@@ -1075,6 +1089,13 @@ class AppSettings extends ChangeNotifier {
       final ls = p.getString('set_last_sync');
       lastSync = ls == null ? null : DateTime.tryParse(ls);
     } catch (_) {}
+    if (serverUrl.trim().isEmpty && kDefaultServerUrl.isNotEmpty) {
+      serverUrl = kDefaultServerUrl;
+      syncEnabled = true;
+    }
+    if (serverKey.trim().isEmpty && kDefaultServerKey.isNotEmpty) {
+      serverKey = kDefaultServerKey;
+    }
   }
 
   Future<void> _persist() async {
@@ -1223,9 +1244,13 @@ class SyncService {
 
   static Map<String, String> _headers([Map<String, String>? extra]) {
     final key = AppSettings.instance.serverKey.trim();
+    final tok = Session.instance.token;
     return {
       'apikey': key,
-      if (key.startsWith('eyJ')) 'Authorization': 'Bearer $key',
+      if (tok != null)
+        'Authorization': 'Bearer $tok'
+      else if (key.startsWith('eyJ'))
+        'Authorization': 'Bearer $key',
       ...?extra,
     };
   }
@@ -1264,6 +1289,9 @@ class SyncService {
     if (running) throw SyncException('المزامنة شغالة بالفعل');
     running = true;
     try {
+      if (!await Session.ensureFresh()) {
+        throw SyncException('انتهت الجلسة، سجّل الدخول من جديد');
+      }
       var pushed = 0;
       var pulled = 0;
       final list = await ReportStore.load();
@@ -1289,7 +1317,8 @@ class SyncService {
             pulled++;
           }
         } else {
-          local.no = (row['report_no'] as num?)?.toInt() ?? local.no;
+          local.no = (row['factory_no'] as num?)?.toInt() ?? local.no;
+          local.factoryId ??= row['factory_id'] as String?;
           final remoteUpdated =
               DateTime.parse(row['updated_at'] as String).toLocal();
           if (!local.dirty && remoteUpdated.isAfter(local.updatedAt)) {
@@ -1348,8 +1377,10 @@ class SyncService {
       if (res.statusCode == 200 || res.statusCode == 201) {
         final data = jsonDecode(utf8.decode(res.bodyBytes)) as List;
         if (data.isNotEmpty) {
-          final no = (data.first as Map)['report_no'];
+          final no = (data.first as Map)['factory_no'];
           if (no is num) r.no = no.toInt();
+          final fid = (data.first as Map)['factory_id'];
+          if (fid is String) r.factoryId = fid;
         }
         r.remote = true;
         r.dirty = false;
@@ -1383,7 +1414,7 @@ class SyncService {
   static Future<List<Map<String, dynamic>>> _fetchRows() async {
     final res = await http
         .get(
-          Uri.parse('$_base/rest/v1/reports?select=*&order=report_no.desc'),
+          Uri.parse('$_base/rest/v1/reports?select=*&order=created_at.desc'),
           headers: _headers(),
         )
         .timeout(_timeout);
@@ -1410,7 +1441,8 @@ class SyncService {
   }
 
   static void _fill(Report r, Map<String, dynamic> row) {
-    r.no = (row['report_no'] as num?)?.toInt() ?? r.no;
+    r.no = (row['factory_no'] as num?)?.toInt() ?? r.no;
+    r.factoryId = row['factory_id'] as String?;
     r.createdAt = DateTime.parse(row['created_at'] as String).toLocal();
     r.location = (row['location'] ?? '') as String;
     r.type = (row['type'] ?? '') as String;
@@ -1506,7 +1538,7 @@ class EcoReportApp extends StatelessWidget {
           child: child ?? const SizedBox.shrink(),
         );
       },
-      home: const AppShell(),
+      home: const SplashScreen(),
         );
       },
     );
@@ -2342,6 +2374,29 @@ class _SettingsTabState extends State<SettingsTab> {
       body: ListView(
         padding: const EdgeInsets.all(14),
         children: [
+          if (Session.instance.loggedIn)
+            _section('حسابي', Icons.account_circle_outlined, [
+              Text(
+                Session.instance.fullName.isEmpty
+                    ? Session.instance.username
+                    : Session.instance.fullName,
+                style: const TextStyle(
+                    fontWeight: FontWeight.bold, fontSize: 16),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                Session.instance.isAdmin
+                    ? 'مدير عام • ${Session.instance.username}'
+                    : 'مبلّغ • ${FactoryStore.instance.nameOf(Session.instance.factoryId)}',
+                style: const TextStyle(color: Colors.grey),
+              ),
+              const SizedBox(height: 12),
+              OutlinedButton.icon(
+                onPressed: () => logoutFlow(context),
+                icon: const Icon(Icons.logout),
+                label: const Text('تسجيل الخروج'),
+              ),
+            ]),
           _section('المظهر', Icons.palette_outlined, [
             _label('نمط الألوان'),
             Wrap(
@@ -2420,6 +2475,7 @@ class _SettingsTabState extends State<SettingsTab> {
               onChanged: s.setReporterName,
             ),
           ]),
+          if (!Session.instance.loggedIn || Session.instance.isAdmin)
           _section('السيرفر والمزامنة', Icons.cloud_outlined, [
             SwitchListTile(
               contentPadding: EdgeInsets.zero,
@@ -2501,7 +2557,7 @@ class _SettingsTabState extends State<SettingsTab> {
           _section('عن التطبيق', Icons.info_outline, const [
             Text('رصد المخلفات البيئية'),
             SizedBox(height: 4),
-            Text('الإصدار 1.3.0',
+            Text('الإصدار 2.0.0',
                 style: TextStyle(color: Colors.grey, fontSize: 12)),
           ]),
           const SizedBox(height: 20),
