@@ -64,10 +64,10 @@ class Session extends ChangeNotifier {
     final base = s.baseUrl;
     final key = s.serverKey.trim();
     if (base.isEmpty || key.isEmpty || base.contains('PUT-YOUR')) {
-      return 'رابط السيرفر مش متظبط في التطبيق';
+      return tr('رابط السيرفر مش متظبط في التطبيق');
     }
     final u = user.trim().toLowerCase();
-    if (u.isEmpty || password.isEmpty) return 'اكتب اسم المستخدم والباسورد';
+    if (u.isEmpty || password.isEmpty) return tr('اكتب اسم المستخدم والباسورد');
     try {
       final res = await http
           .post(
@@ -77,9 +77,9 @@ class Session extends ChangeNotifier {
           )
           .timeout(const Duration(seconds: 30));
       if (res.statusCode == 400 || res.statusCode == 401) {
-        return 'اسم المستخدم أو الباسورد غلط';
+        return tr('اسم المستخدم أو الباسورد غلط');
       }
-      if (res.statusCode != 200) return 'فشل الدخول (كود ${res.statusCode})';
+      if (res.statusCode != 200) return trf('فشل الدخول (كود {0})', [res.statusCode]);
       final j = jsonDecode(utf8.decode(res.bodyBytes)) as Map<String, dynamic>;
       final tok = j['access_token'] as String;
       final uid = (j['user'] as Map)['id'] as String;
@@ -92,17 +92,17 @@ class Session extends ChangeNotifier {
           )
           .timeout(const Duration(seconds: 30));
       if (pr.statusCode != 200) {
-        return 'تعذّر تحميل بيانات الحساب (كود ${pr.statusCode})';
+        return trf('تعذّر تحميل بيانات الحساب (كود {0})', [pr.statusCode]);
       }
       final rows = jsonDecode(utf8.decode(pr.bodyBytes)) as List;
-      if (rows.isEmpty) return 'الحساب ده غير مفعّل. كلّم المدير';
+      if (rows.isEmpty) return tr('الحساب ده غير مفعّل. كلّم المدير');
       final p = rows.first as Map<String, dynamic>;
       final r = (p['role'] ?? 'reporter') as String;
       final fid = p['factory_id'] as String?;
       if (r != 'admin') {
-        if (fid == null) return 'الحساب مش مربوط بمصنع. كلّم المدير';
+        if (fid == null) return tr('الحساب مش مربوط بمصنع. كلّم المدير');
         if (pickedFactoryId != null && fid != pickedFactoryId) {
-          return 'الحساب ده مش تابع للمصنع اللي اخترته';
+          return tr('الحساب ده مش تابع للمصنع اللي اخترته');
         }
       }
 
@@ -130,7 +130,7 @@ class Session extends ChangeNotifier {
       notifyListeners();
       return null;
     } catch (_) {
-      return 'مقدرناش نوصل للسيرفر. راجع الإنترنت';
+      return tr('مقدرناش نوصل للسيرفر. راجع الإنترنت');
     }
   }
 
@@ -261,10 +261,10 @@ class FactoryStore extends ChangeNotifier {
               jsonEncode(items.map((f) => f.toJson()).toList()));
         } catch (_) {}
       } else {
-        error = 'تعذّر تحميل المصانع (كود ${res.statusCode})';
+        error = trf('تعذّر تحميل المصانع (كود {0})', [res.statusCode]);
       }
     } catch (_) {
-      error = 'مقدرناش نوصل للسيرفر. راجع الإنترنت';
+      error = tr('مقدرناش نوصل للسيرفر. راجع الإنترنت');
     }
     loading = false;
     notifyListeners();
@@ -307,10 +307,10 @@ class AdminApi {
           )
           .timeout(_t);
     } catch (_) {
-      throw SyncException('مقدرناش نوصل للسيرفر. راجع الإنترنت');
+      throw SyncException(tr('مقدرناش نوصل للسيرفر. راجع الإنترنت'));
     }
     if (res.statusCode == 404) {
-      throw SyncException('دالة manage-users مش منشورة في Supabase لسه');
+      throw SyncException(tr('دالة manage-users مش منشورة في Supabase لسه'));
     }
     Object? j;
     try {
@@ -322,7 +322,7 @@ class AdminApi {
     if (j is Map && j['error'] != null) {
       throw SyncException(j['error'].toString());
     }
-    throw SyncException('فشل الطلب (كود ${res.statusCode})');
+    throw SyncException(trf('فشل الطلب (كود {0})', [res.statusCode]));
   }
 
   static Future<List<AppUser>> listUsers() async {
@@ -372,7 +372,7 @@ class AdminApi {
     if (res.statusCode >= 200 && res.statusCode < 300) {
       return '$_base/storage/v1/object/public/factory-logos/$name';
     }
-    throw SyncException('فشل رفع الشعار (كود ${res.statusCode}). تأكد إنك شغّلت سكربت v2');
+    throw SyncException(trf('فشل رفع الشعار (كود {0}). تأكد إنك شغّلت سكربت v2', [res.statusCode]));
   }
 
   static Future<void> saveFactory(
@@ -399,7 +399,7 @@ class AdminApi {
           .timeout(_t);
     }
     if (res.statusCode < 200 || res.statusCode >= 300) {
-      throw SyncException('فشل حفظ المصنع (كود ${res.statusCode})');
+      throw SyncException(trf('فشل حفظ المصنع (كود {0})', [res.statusCode]));
     }
   }
 
@@ -412,10 +412,10 @@ class AdminApi {
         )
         .timeout(_t);
     if (res.statusCode == 409) {
-      throw SyncException('مينفعش تحذف مصنع عليه بلاغات');
+      throw SyncException(tr('مينفعش تحذف مصنع عليه بلاغات'));
     }
     if (res.statusCode < 200 || res.statusCode >= 300) {
-      throw SyncException('فشل الحذف (كود ${res.statusCode})');
+      throw SyncException(trf('فشل الحذف (كود {0})', [res.statusCode]));
     }
   }
 }
@@ -489,17 +489,17 @@ Future<void> logoutFlow(BuildContext context) async {
   final ok = await showDialog<bool>(
     context: context,
     builder: (ctx) => AlertDialog(
-      title: const Text('تسجيل الخروج'),
+      title: Text(tr('تسجيل الخروج')),
       content: Text(pending > 0
-          ? 'فيه $pending بلاغ لسه ماتبعتش للسيرفر وهيتمسح لو خرجت. متأكد؟'
-          : 'هتخرج من حسابك. متأكد؟'),
+          ? trf('فيه {0} بلاغ لسه ماتبعتش للسيرفر وهيتمسح لو خرجت. متأكد؟', [pending])
+          : tr('هتخرج من حسابك. متأكد؟')),
       actions: [
         TextButton(
             onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('إلغاء')),
+            child: Text(tr('إلغاء'))),
         FilledButton(
             onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('خروج')),
+            child: Text(tr('خروج'))),
       ],
     ),
   );
