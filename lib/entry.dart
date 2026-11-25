@@ -29,7 +29,7 @@ class SplashScreen extends StatefulWidget {
 class _SplashScreenState extends State<SplashScreen>
     with SingleTickerProviderStateMixin {
   late final AnimationController _c = AnimationController(
-      vsync: this, duration: const Duration(milliseconds: 2600));
+      vsync: this, duration: const Duration(milliseconds: 4600));
 
   late final Animation<double> _logoScale = Tween<double>(begin: 0.3, end: 1)
       .animate(CurvedAnimation(
@@ -37,12 +37,10 @@ class _SplashScreenState extends State<SplashScreen>
           curve: const Interval(0.0, 0.55, curve: Curves.easeOutBack)));
   late final Animation<double> _logoFade = CurvedAnimation(
       parent: _c, curve: const Interval(0.0, 0.3, curve: Curves.easeOut));
-  late final Animation<double> _ring = CurvedAnimation(
-      parent: _c, curve: const Interval(0.35, 0.95, curve: Curves.easeOut));
   late final Animation<double> _title = CurvedAnimation(
-      parent: _c, curve: const Interval(0.45, 0.8, curve: Curves.easeOut));
+      parent: _c, curve: const Interval(0.2, 0.45, curve: Curves.easeOut));
   late final Animation<double> _tag = CurvedAnimation(
-      parent: _c, curve: const Interval(0.65, 1.0, curve: Curves.easeOut));
+      parent: _c, curve: const Interval(0.45, 0.85, curve: Curves.linear));
 
   @override
   void initState() {
@@ -51,7 +49,7 @@ class _SplashScreenState extends State<SplashScreen>
     if (Session.instance.loggedIn) {
       FactoryStore.instance.refresh();
     }
-    Future.delayed(const Duration(milliseconds: 3000), _go);
+    Future.delayed(const Duration(milliseconds: 5400), _go);
   }
 
   void _go() {
@@ -70,7 +68,6 @@ class _SplashScreenState extends State<SplashScreen>
 
   @override
   Widget build(BuildContext context) {
-    final seed = AppSettings.instance.seed;
     return Scaffold(
       body: Container(
         decoration: _brandGradient(),
@@ -82,51 +79,11 @@ class _SplashScreenState extends State<SplashScreen>
               return Column(
                 children: [
                   const Spacer(flex: 3),
-                  SizedBox(
-                    width: 220,
-                    height: 220,
-                    child: Stack(
-                      alignment: Alignment.center,
-                      children: [
-                        Opacity(
-                          opacity: ((1 - _ring.value) * 0.5).clamp(0.0, 1.0),
-                          child: Transform.scale(
-                            scale: 0.6 + _ring.value * 0.9,
-                            child: Container(
-                              width: 160,
-                              height: 160,
-                              decoration: BoxDecoration(
-                                shape: BoxShape.circle,
-                                border:
-                                    Border.all(color: Colors.white, width: 3),
-                              ),
-                            ),
-                          ),
-                        ),
-                        Opacity(
-                          opacity: _logoFade.value,
-                          child: Transform.scale(
-                            scale: _logoScale.value,
-                            child: Container(
-                              width: 132,
-                              height: 132,
-                              decoration: const BoxDecoration(
-                                color: Colors.white,
-                                shape: BoxShape.circle,
-                                boxShadow: [
-                                  BoxShadow(
-                                    color: Color(0x40000000),
-                                    blurRadius: 24,
-                                    offset: Offset(0, 10),
-                                  ),
-                                ],
-                              ),
-                              child: Icon(Icons.eco_rounded,
-                                  size: 78, color: seed),
-                            ),
-                          ),
-                        ),
-                      ],
+                  Opacity(
+                    opacity: _logoFade.value,
+                    child: Transform.scale(
+                      scale: 0.6 + 0.4 * _logoScale.value.clamp(0.0, 1.0),
+                      child: const EarthLogo(size: 190),
                     ),
                   ),
                   const SizedBox(height: 8),
@@ -134,31 +91,22 @@ class _SplashScreenState extends State<SplashScreen>
                     opacity: _title.value,
                     child: Transform.translate(
                       offset: Offset(0, (1 - _title.value) * 24),
-                      child: Text(
-                        tr('رصد المخلفات البيئية'),
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 26,
-                          fontWeight: FontWeight.bold,
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 24),
+                        child: Text(
+                          tr('رصد المخالفات البيئية'),
+                          textAlign: TextAlign.center,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 26,
+                            fontWeight: FontWeight.bold,
+                          ),
                         ),
                       ),
                     ),
                   ),
                   const SizedBox(height: 10),
-                  Opacity(
-                    opacity: _tag.value,
-                    child: Transform.translate(
-                      offset: Offset(0, (1 - _tag.value) * 16),
-                      child: Text(
-                        tr(kTagline),
-                        style: const TextStyle(
-                          color: Color(0xCCFFFFFF),
-                          fontSize: 16,
-                          letterSpacing: 0.5,
-                        ),
-                      ),
-                    ),
-                  ),
+                  _Typewriter(text: tr(kTagline), t: _tag.value, clock: _c.value),
                   const Spacer(flex: 4),
                   Opacity(
                     opacity: _tag.value,
@@ -174,6 +122,40 @@ class _SplashScreenState extends State<SplashScreen>
               );
             },
           ),
+        ),
+      ),
+    );
+  }
+}
+
+class _Typewriter extends StatelessWidget {
+  final String text;
+  final double t; // 0..1 تقدم الكتابة
+  final double clock;
+  const _Typewriter({required this.text, required this.t, required this.clock});
+
+  @override
+  Widget build(BuildContext context) {
+    final chars = text.characters.toList();
+    final n = (chars.length * t).floor().clamp(0, chars.length);
+    final done = n >= chars.length;
+    final pulse = 0.5 + 0.5 * sin(clock * 4600 / 1000 * 3.0);
+    final glow = const Color(0xFFB9F6CA);
+    final shown = chars.take(n).join();
+    final cursor = (!done && (clock * 4600 ~/ 300).isEven) ? '▎' : ' ';
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 24),
+      child: Text(
+        n == 0 ? ' ' : shown + (done ? '' : cursor),
+        textAlign: TextAlign.center,
+        style: TextStyle(
+          color: Colors.white,
+          fontSize: 18,
+          letterSpacing: 0.6,
+          shadows: [
+            Shadow(color: glow.withValues(alpha: 0.55 + 0.35 * pulse), blurRadius: 8 + 8 * pulse),
+            Shadow(color: glow.withValues(alpha: 0.35 * pulse), blurRadius: 22),
+          ],
         ),
       ),
     );

@@ -22,8 +22,8 @@ String trf(String ar, List<Object?> args) {
 
 const Map<String, String> _kEn = {
   // الشاشة الافتتاحية واختيار المصنع
-  'رصد المخلفات': 'Waste Monitoring',
-  'رصد المخلفات البيئية': 'Environmental Waste Monitoring',
+  'رصد المخالفات': 'Violation Monitoring',
+  'رصد المخالفات البيئية': 'Environmental Violation Monitoring',
   'معًا للحفاظ على البيئة': 'Together for the environment',
   'اختر مصنعك': 'Choose your factory',
   'اضغط على شعار مصنعك لتسجيل الدخول': 'Tap your factory logo to sign in',
