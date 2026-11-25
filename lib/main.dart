@@ -1,8 +1,10 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:math';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_map/flutter_map.dart';
@@ -27,6 +29,7 @@ part 'admin.dart';
 part 'l10n.dart';
 part 'biometric.dart';
 part 'analytics.dart';
+part 'earth.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -1577,7 +1580,7 @@ class EcoReportApp extends StatelessWidget {
       builder: (context, _) {
         final s = AppSettings.instance;
         return MaterialApp(
-      title: tr('رصد المخلفات'),
+      title: tr('رصد المخالفات'),
       debugShowCheckedModeBanner: false,
       locale: Locale(s.lang),
       supportedLocales: const [Locale('ar'), Locale('en')],
@@ -2678,7 +2681,7 @@ class _SettingsTabState extends State<SettingsTab> {
             ),
           ]),
           _section(tr('عن التطبيق'), Icons.info_outline, [
-            Text(tr('رصد المخلفات البيئية')),
+            Text(tr('رصد المخالفات البيئية')),
             SizedBox(height: 4),
             Text(tr('الإصدار 2.0.0'),
                 style: TextStyle(color: Colors.grey, fontSize: 12)),
