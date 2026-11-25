@@ -207,6 +207,7 @@ class _AdminShellState extends State<AdminShell> {
                 ),
                 const FactoriesAdminTab(),
                 const UsersAdminTab(),
+                AnalyticsTab(reports: _reports, byFactory: true),
                 SettingsTab(
                   syncing: _syncing,
                   onSyncNow: () => _syncNow(silent: false),
@@ -231,6 +232,11 @@ class _AdminShellState extends State<AdminShell> {
             icon: Icon(Icons.group_outlined),
             selectedIcon: Icon(Icons.group),
             label: tr('المستخدمون'),
+          ),
+          NavigationDestination(
+            icon: const Icon(Icons.insights_outlined),
+            selectedIcon: const Icon(Icons.insights),
+            label: tr('التحليلات'),
           ),
           NavigationDestination(
             icon: Icon(Icons.settings_outlined),

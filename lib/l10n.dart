@@ -60,6 +60,7 @@ const Map<String, String> _kEn = {
   'مقدرناش نوصل للسيرفر. راجع الإنترنت':
       'Could not reach the server. Check your internet connection',
   // الإعدادات
+  'التحليلات': 'Analytics',
   'أخضر مائي': 'Aqua green',
   'أخضر زيتي': 'Olive green',
   'ليموني': 'Lime',
