@@ -26,6 +26,7 @@ part 'entry.dart';
 part 'admin.dart';
 part 'l10n.dart';
 part 'biometric.dart';
+part 'analytics.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -1760,6 +1761,7 @@ class _AppShellState extends State<AppShell> {
                   onRefresh: _pullToRefresh,
                 ),
                 MapTab(reports: _filtered, onOpen: _openDetails),
+                AnalyticsTab(reports: _reports),
                 SettingsTab(
                   syncing: _syncing,
                   onSyncNow: () => _syncNow(silent: false),
@@ -1786,6 +1788,11 @@ class _AppShellState extends State<AppShell> {
             icon: Icon(Icons.map_outlined),
             selectedIcon: Icon(Icons.map),
             label: tr('الخريطة'),
+          ),
+          NavigationDestination(
+            icon: const Icon(Icons.insights_outlined),
+            selectedIcon: const Icon(Icons.insights),
+            label: tr('التحليلات'),
           ),
           NavigationDestination(
             icon: Icon(Icons.settings_outlined),
