@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>رصد المخالفات البيئية</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/app.css">
+<script src="config.js"></script><script src="assets/options.js"></script><script src="assets/common.js"></script>
+</head>
+<body>
+<div id="top"></div>
+<main class="narrow">
+  <div class="hero"><h1 data-i="submitTitle"></h1><p class="muted" data-i="submitSub"></p></div>
+  <form id="f" class="card" novalidate>
+    <div class="field"><span class="lbl" data-i="chooseFactory"></span><div id="factories" class="factory-grid"><span class="spin"></span></div></div>
+    <div class="field"><label data-i="location" for="location"></label><select id="location"></select><input id="location_o" class="hide" maxlength="120"></div>
+    <div class="field"><label data-i="type" for="type"></label><select id="type"></select><input id="type_o" class="hide" maxlength="120"></div>
+    <div class="field"><label data-i="resp" for="resp"></label><select id="resp"></select><input id="resp_o" class="hide" maxlength="120"></div>
+    <div class="field"><span class="lbl" data-i="severity"></span><div id="sev" class="chips"></div></div>
+    <div class="field"><span class="lbl" data-i="impacts"></span><div id="imp" class="chips"></div></div>
+    <div class="field"><label data-i="desc" for="desc"></label><textarea id="desc" maxlength="2000"></textarea></div>
+    <div class="field"><label data-i="reporter" for="reporter"></label><input id="reporter" maxlength="80" autocomplete="name"></div>
+    <div class="field"><span class="lbl" data-i="photo"></span>
+      <label class="photo-drop" id="drop"><span id="dropTxt" data-i="addPhoto"></span><img id="prev" class="hide" alt=""><input id="photo" type="file" accept="image/*" class="hide"></label></div>
+    <div class="field"><button type="button" class="btn tonal" id="geo" data-i="getLoc"></button><span id="geoMsg" class="muted"></span></div>
+    <div id="err" class="msg err hide"></div>
+    <button class="btn" id="send" type="submit" data-i="send" style="width:100%"></button>
+  </form>
+  <div id="done" class="card hide" style="text-align:center">
+    <h2 id="doneMsg"></h2><p class="muted" id="doneNo"></p><button class="btn" id="again" data-i="another"></button>
+  </div>
+  <p class="muted" style="text-align:center;margin-top:18px"><a href="admin.html" data-i="adminLogin"></a></p>
+</main>
+<script src="assets/submit.js"></script>
+</body>
+</html>
